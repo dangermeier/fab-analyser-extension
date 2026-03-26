@@ -1,0 +1,84 @@
+/* themes.css — CSS custom properties for all colour themes.
+   Each theme overrides the shared surface, text and accent variables.
+   Add a new [data-theme] block here to create an additional theme. */
+
+:root {
+  --gold:       #c8972a;
+  --gold-light: #e8b84a;
+  --gold-dim:   #7a5410;
+  --win:        #5aad6a;
+  --loss:       #c05050;
+  --bye:        #5a7aad;
+}
+
+[data-theme="dark"] {
+  --bg-deep:         #0e0b07;
+  --bg-mid:          #1a1408;
+  --bg-card:         #221a0c;
+  --bg-card-hover:   #2e2310;
+  --bg-overlay:      #1a1408ee;
+  --text:            #e8dcc8;
+  --text-dim:        #9a8a6a;
+  --text-muted:      #5a4a2a;
+  --border:          rgba(200,151,42,0.18);
+  --border-bright:   rgba(200,151,42,0.5);
+  --scrollbar-bg:    #1a1408;
+  --scrollbar-thumb: #7a5410;
+}
+
+[data-theme="light"] {
+  --bg-deep:         #f5f0e8;
+  --bg-mid:          #ede5d5;
+  --bg-card:         #fff8ee;
+  --bg-card-hover:   #fdf4e4;
+  --bg-overlay:      #ede5d5ee;
+  --text:            #2a1f0a;
+  --text-dim:        #6b5530;
+  --text-muted:      #b09060;
+  --border:          rgba(120,80,20,0.2);
+  --border-bright:   rgba(140,90,20,0.6);
+  --scrollbar-bg:    #ede5d5;
+  --scrollbar-thumb: #c8972a;
+}
+
+[data-theme="midnight"] {
+  --bg-deep:         #080c14;
+  --bg-mid:          #0d1420;
+  --bg-card:         #121a2a;
+  --bg-card-hover:   #182030;
+  --bg-overlay:      #0d1420ee;
+  --text:            #c8d8f0;
+  --text-dim:        #6888b0;
+  --text-muted:      #344860;
+  --border:          rgba(80,130,200,0.2);
+  --border-bright:   rgba(100,160,220,0.5);
+  --gold:            #5090d0;
+  --gold-light:      #70b0f0;
+  --gold-dim:        #305080;
+  --scrollbar-bg:    #0d1420;
+  --scrollbar-thumb: #305080;
+}
+
+[data-theme="crimson"] {
+  --bg-deep:         #120608;
+  --bg-mid:          #1e0a0c;
+  --bg-card:         #280d10;
+  --bg-card-hover:   #321018;
+  --bg-overlay:      #1e0a0cee;
+  --text:            #f0d0d4;
+  --text-dim:        #a05060;
+  --text-muted:      #5a2030;
+  --border:          rgba(180,50,60,0.2);
+  --border-bright:   rgba(200,70,80,0.5);
+  --gold:            #d04050;
+  --gold-light:      #f06070;
+  --gold-dim:        #801828;
+  --scrollbar-bg:    #1e0a0c;
+  --scrollbar-thumb: #801828;
+}
+
+/* Static theme swatch previews (used in the Settings tab) */
+.swatch-dark     { background: radial-gradient(circle, #c8972a, #0e0b07); }
+.swatch-light    { background: radial-gradient(circle, #c8972a, #f5f0e8); }
+.swatch-midnight { background: radial-gradient(circle, #5090d0, #080c14); }
+.swatch-crimson  { background: radial-gradient(circle, #d04050, #120608); }

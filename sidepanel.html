@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>FaB Analyser Extension</title>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&family=Crimson+Pro:ital,wght@0,300;0,400;0,600;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="themes.css">
+  <link rel="stylesheet" href="base.css">
+  <link rel="stylesheet" href="components.css">
+  <style>body { min-width: 0; min-height: 0; font-size: 14px; }</style>
+</head>
+<body data-theme="dark">
+
+<!-- HEADER -->
+<div class="header">
+  <div class="header-title">⚔ FaB Analyser</div>
+  <div class="header-sub" id="player-name">Flesh and Blood Analytics</div>
+  <div class="header-actions">
+    <button class="btn-export hidden" id="btn-export" title="Export to CSV">📊 Export</button>
+    <button class="btn-scrape" id="btn-scrape">Sync Data</button>
+  </div>
+</div>
+
+<!-- TABS -->
+<div class="tabs">
+  <div class="tab active" data-tab="overview">Overview</div>
+  <div class="tab" data-tab="heroes">Heroes</div>
+  <div class="tab" data-tab="opponents">Opponents</div>
+  <div class="tab" data-tab="trends">Trends</div>
+  <div class="tab" data-tab="events">Events</div>
+  <div class="tab tab--hidden" id="tab-judge" data-tab="judge">⚖ Judge</div>
+  <div class="tab" data-tab="settings">⚙</div>
+</div>
+
+<!-- MAIN AREA -->
+<div class="main" id="main-area">
+
+  <!-- Loading -->
+  <div class="status-screen hidden" id="status-loading">
+    <div class="icon">⚙</div>
+    <h3>Syncing…</h3>
+    <p class="loading-text" id="loading-text">Connecting to GEM…</p>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar" id="progress-bar"></div>
+    </div>
+    <div class="progress-label" id="progress-label">–</div>
+  </div>
+
+  <!-- Empty state -->
+  <div class="status-screen" id="status-empty">
+    <div class="icon">🗡</div>
+    <h3>No Data Yet</h3>
+    <p>Open GEM while logged in, then click <strong>Sync Data</strong> to load your tournament history.</p>
+  </div>
+
+  <!-- OVERVIEW -->
+  <div class="pane" id="pane-overview">
+    <div class="stat-grid" id="overview-stats"></div>
+    <div class="section-title">Win Rate by Event Type</div>
+    <table class="data-table">
+      <thead><tr><th>Event Type</th><th>Events</th><th>W</th><th>L</th><th>WR%</th><th>Visual</th></tr></thead>
+      <tbody id="etype-body"></tbody>
+    </table>
+    <div class="section-title">Win Rate by Format</div>
+    <table class="data-table">
+      <thead><tr><th>Format</th><th>Events</th><th>W</th><th>L</th><th>WR%</th></tr></thead>
+      <tbody id="format-body"></tbody>
+    </table>
+    <div class="section-title">Profile Stats</div>
+    <div class="stat-grid" id="elo-stats"></div>
+  </div>
+
+  <!-- HEROES -->
+  <div class="pane" id="pane-heroes">
+    <p class="pane-note">Extracted from submitted decklists. Events without a decklist show as "? Unknown".</p>
+    <div class="hero-list" id="hero-list"></div>
+  </div>
+
+  <!-- OPPONENTS -->
+  <div class="pane" id="pane-opponents">
+    <div class="filter-row" id="opponent-filter-row"></div>
+    <div id="opponent-list"></div>
+  </div>
+
+  <!-- TRENDS -->
+  <div class="pane" id="pane-trends">
+    <div class="date-range-row">
+      <label>From</label>
+      <input type="date" class="date-input" id="trend-from">
+      <label>To</label>
+      <input type="date" class="date-input" id="trend-to">
+      <button class="filter-btn active" id="trend-reset">All Time</button>
+    </div>
+    <div class="stat-grid" id="trend-stats"></div>
+    <div class="section-title">Rolling Win Rate (10-event window)</div>
+    <div class="chart-wrap"><svg id="chart-winrate" class="sparkline-svg" height="110"></svg></div>
+    <div class="section-title">Win Rate by Month</div>
+    <div class="chart-wrap"><svg id="chart-monthly" class="sparkline-svg" height="100"></svg></div>
+    <div class="section-title">Cumulative XP</div>
+    <div class="chart-wrap"><svg id="chart-xp" class="sparkline-svg" height="90"></svg></div>
+    <div class="section-title">ELO Change (Rated Events)</div>
+    <div class="chart-wrap" id="elo-chart-wrap"><svg id="chart-elo" class="sparkline-svg" height="90"></svg></div>
+    <div class="section-title">Hero Win Rate Trend</div>
+    <p class="pane-note">Shows whether your win rate with each hero improved or declined over time (requires ≥ 4 events with that hero).</p>
+    <div id="hero-trend-list"></div>
+    <div class="section-title">Win Rate by Venue</div>
+    <table class="data-table">
+      <thead><tr><th>Venue</th><th>Events</th><th>W</th><th>L</th><th>WR%</th></tr></thead>
+      <tbody id="venue-body"></tbody>
+    </table>
+    <div class="section-title">Most Active Months</div>
+    <table class="data-table">
+      <thead><tr><th>Month</th><th>Events</th><th>W</th><th>L</th><th>WR%</th><th>XP</th></tr></thead>
+      <tbody id="month-body"></tbody>
+    </table>
+  </div>
+
+  <!-- EVENTS -->
+  <div class="pane" id="pane-events">
+    <div class="filter-row" id="event-filter-row"></div>
+    <table class="data-table">
+      <thead><tr><th>Date</th><th>Event</th><th>Format</th><th>Hero</th><th>W–L</th><th>XP</th><th>Rated</th></tr></thead>
+      <tbody id="events-body"></tbody>
+    </table>
+  </div>
+
+  <!-- JUDGE / SCOREKEEPER -->
+  <div class="pane" id="pane-judge">
+    <div id="judge-event-list"></div>
+    <div class="judge-detail" id="judge-detail">
+      <button class="btn-back" id="judge-back-btn">← Back to list</button>
+      <div id="judge-detail-content"></div>
+    </div>
+  </div>
+
+  <!-- SETTINGS -->
+  <div class="pane" id="pane-settings">
+
+    <div class="settings-section">
+      <div class="settings-label">Appearance</div>
+      <div class="settings-row">
+        <div class="settings-row-label">Theme</div>
+        <div class="theme-grid">
+          <div class="theme-btn" data-theme="dark">
+            <div class="theme-swatch swatch-dark"></div>Dark Gold
+          </div>
+          <div class="theme-btn" data-theme="light">
+            <div class="theme-swatch swatch-light"></div>Parchment
+          </div>
+          <div class="theme-btn" data-theme="midnight">
+            <div class="theme-swatch swatch-midnight"></div>Midnight
+          </div>
+          <div class="theme-btn" data-theme="crimson">
+            <div class="theme-swatch swatch-crimson"></div>Crimson
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Updates</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Version</div>
+          <div class="settings-row-note">Installed: v<span id="settings-version"></span></div>
+        </div>
+        <div id="update-status" class="update-badge update-badge--checking">Checking…</div>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">Data</div>
+      <div class="settings-row">
+        <div>
+          <div class="settings-row-label">Clear all stored data</div>
+          <div class="settings-row-note">Removes your synced history from this browser.</div>
+        </div>
+        <button class="btn-danger" id="btn-clear">Clear Data</button>
+      </div>
+    </div>
+
+    <div class="settings-section">
+      <div class="settings-label">About</div>
+      <div class="settings-row">
+        <div class="settings-row-label">Source code</div>
+        <a class="settings-link" href="https://github.com/dangermeier/fab-analyser-extension" target="_blank">GitHub ↗</a>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">Privacy policy</div>
+        <a class="settings-link" href="https://github.com/dangermeier/fab-analyser-extension/blob/main/PRIVACY.md" target="_blank">View ↗</a>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-label">Report an issue</div>
+        <a class="settings-link" href="https://github.com/dangermeier/fab-analyser-extension/issues" target="_blank">Issues ↗</a>
+      </div>
+    </div>
+
+  </div>
+
+</div><!-- /main -->
+
+<!-- FOOTER -->
+<div class="footer-bar">
+  <span id="sync-info">No data loaded</span>
+  <span id="event-count"></span>
+</div>
+
+<!-- OPPONENT MODAL -->
+<div class="modal-overlay hidden" id="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="modal-title">Opponent</div>
+        <div class="modal-sub" id="modal-sub"></div>
+      </div>
+      <button class="modal-close" id="modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="match-history-row match-history-header">
+        <span>Hero</span><span>Event</span><span>Result</span><span>Date</span>
+      </div>
+      <div id="modal-matches"></div>
+    </div>
+  </div>
+</div>
+
+<!-- HERO MODAL -->
+<div class="modal-overlay hidden" id="hero-modal-overlay">
+  <div class="modal modal--md">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="hero-modal-title">Hero</div>
+        <div class="modal-sub" id="hero-modal-sub"></div>
+      </div>
+      <button class="modal-close" id="hero-modal-close">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="hero-modal-content"></div>
+    </div>
+  </div>
+</div>
+
+<!-- MONTH DETAIL MODAL -->
+<div class="modal-overlay hidden" id="month-modal-overlay">
+  <div class="modal modal--lg">
+    <div class="modal-header">
+      <div>
+        <div class="modal-title" id="month-modal-title"></div>
+        <div class="modal-sub" id="month-modal-sub"></div>
+      </div>
+      <button class="modal-close" id="month-modal-close">✕</button>
+    </div>
+    <div class="modal-body" id="month-modal-body"></div>
+  </div>
+</div>
+
+<script src="popup.js"></script>
+</body>
+</html>

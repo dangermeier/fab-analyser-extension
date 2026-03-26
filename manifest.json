@@ -1,0 +1,58 @@
+{
+  "manifest_version": 3,
+  "name": "FAB Stats Tracker",
+  "version": "1.2.0",
+  "description": "Personal tournament statistics dashboard for Flesh and Blood TCG. Tracks win rates, hero performance, opponent history and XP/ELO trends from your GEM profile.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "tabs"
+  ],
+  "host_permissions": [
+    "https://gem.fabtcg.com/*",
+    "https://api.goagain.dev/*",
+    "https://storage.googleapis.com/fabmaster/*",
+    "https://d2wlb52bya4y8z.cloudfront.net/*",
+    "https://legendstory-production-s3-public.s3.amazonaws.com/*"
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "dashboard.html",
+        "popup.html",
+        "popup.js",
+        "sidepanel.html",
+        "styles.css",
+        "themes.css",
+        "base.css",
+        "components.css"
+      ],
+      "matches": [
+        "https://gem.fabtcg.com/*"
+      ]
+    }
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "FAB Stats Tracker"
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://gem.fabtcg.com/*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}
