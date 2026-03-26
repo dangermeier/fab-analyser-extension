@@ -115,7 +115,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.0.0';
+const CURRENT_VERSION = '1.2.0';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
