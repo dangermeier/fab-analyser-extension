@@ -1,5 +1,33 @@
 # Changelog
 
+## 1.4.0 — April 2026
+
+### Changed
+- Sync is now incremental: known closed events are skipped on re-sync, only new and previously active events are re-fetched
+- Scraping stops early once a full page contains only already-known closed events and all previously active events are resolved
+- Previously active events that closed between syncs but weren't found on scraped pages are fetched individually via `/profile/report/{id}/`
+
+### Fixed
+- Floating button icon on gem.fabtcg.com no longer missing — extension icons are now declared in `web_accessible_resources`
+
+---
+
+## 1.3.0 — March 2026
+
+### Added
+- Active (in-progress) events are now detected and included in the dashboard
+- Each active event is enriched by fetching `/profile/report/{id}/` for matches, hero and meta
+- Active events show a ⚡ Live badge in the Events tab and a green row highlight
+- Settings tab now shows the correct installed version
+
+### Changed
+- CSS split into `themes.css`, `base.css`, `components.css` for better maintainability
+- Inline styles removed from `popup.html` and significantly reduced in `popup.js`
+- Settings tab replaces the old theme modal — theme selector, version check, data management and links all in one place
+- Version check queries the GitHub Releases API and shows an "available" badge when a newer release exists
+
+---
+
 ## 1.2.0 — March 2026
 
 ### Added

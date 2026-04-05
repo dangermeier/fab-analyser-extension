@@ -89,55 +89,141 @@ function sendProgress(msg) {
 }
 
 async function scrapeAllPages() {
-  const allEvents = [];
+  // ── Load existing data for incremental sync ──────────────────────────────────
+  const stored = await chrome.storage.local.get(['fabStats']);
+  const existingData = stored.fabStats;
+  const isIncremental = !!(existingData?.events?.length);
+
+  // Build lookup from existing data
+  const existingEventMap = new Map(); // id → event
+  const prevActiveIds = new Set();    // events that were active in last scrape
+
+  if (isIncremental) {
+    for (const ev of existingData.events) {
+      existingEventMap.set(ev.id, ev);
+      if (ev.status === 'active') prevActiveIds.add(ev.id);
+    }
+  }
 
   sendProgress('Connecting to GEM…');
   const firstHtml = await fetchPage(1);
-
   const playerMeta = extractPlayerMeta(firstHtml);
   const maxPage = findMaxPage(firstHtml);
 
+  const modeLabel = isIncremental ? 'incremental sync' : 'full scan';
   if (playerMeta.name && playerMeta.name !== 'Unknown') {
-    sendProgress(`Logged in as ${playerMeta.name} — ${maxPage} pages found`);
+    sendProgress(`Logged in as ${playerMeta.name} — ${maxPage} pages (${modeLabel})`);
   } else {
-    sendProgress(`${maxPage} pages found…`);
+    sendProgress(`${maxPage} pages (${modeLabel})…`);
   }
 
-  const page1Events = parseEventsFromHtml(firstHtml);
-  allEvents.push(...page1Events);
-  sendProgress(`Page 1 / ${maxPage} — ${allEvents.length} events loaded`);
+  // ── Scrape pages ─────────────────────────────────────────────────────────────
+  // scrapedEvents: freshly fetched events in GEM page order (newest first)
+  const scrapedEvents = [];
+  const scrapedIds    = new Set();
+  // Copy so we can track which prev-active events are still unresolved
+  const remainingPrevActive = new Set(prevActiveIds);
+
+  // Returns true if any event on this page was new or previously active (= changed)
+  function processPage(pageEvents) {
+    let hasNewOrChanged = false;
+    for (const ev of pageEvents) {
+      if (!scrapedIds.has(ev.id)) {
+        scrapedEvents.push(ev);
+        scrapedIds.add(ev.id);
+      }
+      // Was this event already known-and-closed?
+      if (existingEventMap.get(ev.id)?.status !== 'done') hasNewOrChanged = true;
+      // Mark previously-active event as resolved
+      if (remainingPrevActive.has(ev.id)) remainingPrevActive.delete(ev.id);
+    }
+    return hasNewOrChanged;
+  }
+
+  // Always fetch page 1
+  processPage(parseEventsFromHtml(firstHtml));
+  sendProgress(`Page 1 / ${maxPage} — ${scrapedEvents.length} events…`);
 
   for (let page = 2; page <= maxPage; page++) {
     await sleep(500);
     try {
       const html = await fetchPage(page);
-      const events = parseEventsFromHtml(html);
-      allEvents.push(...events);
+      const pageEvents = parseEventsFromHtml(html);
+      const hadNewOrChanged = processPage(pageEvents);
+
       const pct = Math.round((page / maxPage) * 100);
-      sendProgress(`Page ${page} / ${maxPage} (${pct}%) — ${allEvents.length} events so far…`);
+      sendProgress(`Page ${page} / ${maxPage} (${pct}%) — ${scrapedEvents.length} events…`);
+
+      // Early-stop (incremental only):
+      // All events on this page were already known-and-closed
+      // AND all previously-active events have been found on a scrape page.
+      // We cannot stop while prev-active events are unresolved because a closed
+      // event may appear on any page depending on when it ended.
+      if (isIncremental && !hadNewOrChanged && remainingPrevActive.size === 0) {
+        sendProgress(`Up to date — stopped at page ${page} of ${maxPage}`);
+        break;
+      }
     } catch (err) {
       console.error(`FAB Tracker: page ${page} failed:`, err.message);
       sendProgress(`Page ${page} / ${maxPage} — fetch error, skipping…`);
     }
   }
 
-  sendProgress(`All ${maxPage} pages done — loading profile stats…`);
+  // ── Profile stats + current active events ────────────────────────────────────
+  sendProgress('Loading profile stats…');
+  const { stats: profileStats, activeEvents } = await scrapeProfileStats();
+  const currentActiveIds = new Set(activeEvents.map(e => e.id));
 
-  const profileStats = await scrapeProfileStats();
-  sendProgress(`Saving ${allEvents.length} events…`);
+  // ── Handle prev-active events that are now closed but not on scraped pages ───
+  // These are events that were active before, are no longer active now,
+  // but weren't encountered during page scraping (e.g. scraping stopped early
+  // or the event landed on a page we skipped due to a fetch error).
+  const nowClosedUnfound = [...remainingPrevActive].filter(id => !currentActiveIds.has(id));
+  if (nowClosedUnfound.length > 0) {
+    sendProgress(`Fetching ${nowClosedUnfound.length} newly completed event(s)…`);
+    for (const id of nowClosedUnfound) {
+      try {
+        const res = await fetch(`https://gem.fabtcg.com/profile/report/${id}/`, {
+          credentials: 'include', headers: { 'Accept': 'text/html' }
+        });
+        if (!res.ok) continue;
+        const reportHtml = await res.text();
+        const ev = { ...existingEventMap.get(id), id, status: 'done' };
+        enrichActiveEventFromReport(ev, reportHtml);
+        scrapedEvents.push(ev);
+        scrapedIds.add(id);
+      } catch { /* skip */ }
+    }
+  }
 
-  const result = {
-    player: playerMeta,
-    events: allEvents,
-    profileStats,
-    lastScrape: Date.now()
-  };
+  // ── Build final ordered event list ───────────────────────────────────────────
+  // Order: active events first → freshly scraped (page order = newest first)
+  //        → remaining known-closed events from previous scrape
+  const finalEvents = [];
+  const seenIds = new Set();
 
+  for (const ev of activeEvents) {
+    finalEvents.push(ev);
+    seenIds.add(ev.id);
+  }
+  for (const ev of scrapedEvents) {
+    if (!seenIds.has(ev.id)) { finalEvents.push(ev); seenIds.add(ev.id); }
+  }
+  if (isIncremental) {
+    for (const ev of existingData.events) {
+      if (!seenIds.has(ev.id)) { finalEvents.push(ev); seenIds.add(ev.id); }
+    }
+  }
+
+  const newCount  = scrapedEvents.filter(e => !existingEventMap.has(e.id)).length;
+  const savedMsg  = isIncremental
+    ? `${newCount} new event(s) — ${finalEvents.length} total — saving…`
+    : `${finalEvents.length} events — saving…`;
+  sendProgress(savedMsg);
+
+  const result = { player: playerMeta, events: finalEvents, profileStats, lastScrape: Date.now() };
   await chrome.storage.local.set({ fabStats: result, lastScrape: Date.now() });
-
-  // Notify all open extension pages that new data is available
   chrome.runtime.sendMessage({ action: 'dataUpdated' }).catch(() => {});
-
   return result;
 }
 
@@ -162,10 +248,103 @@ async function scrapeProfileStats() {
   try {
     const res = await fetch('https://gem.fabtcg.com/profile/player/', { credentials: 'include' });
     const html = await res.text();
-    return parseProfileStats(html);
+    const stats = parseProfileStats(html);
+    const activeEvents = await parseActiveEvents(html);
+    return { stats, activeEvents };
   } catch (e) {
-    return null;
+    return { stats: null, activeEvents: [] };
   }
+}
+
+// Parse events marked "In Progress" from /profile/player/
+// These are the same <div class="event"> blocks but with event__when--active.
+// Active events have no match data on the player page — we fetch /profile/report/{id}/
+// for each one to get the full match history, hero, etc.
+async function parseActiveEvents(html) {
+  const events = parseEventsFromHtml(html);
+  const active = events.filter(ev => ev.status === 'active');
+
+  // Enrich each active event with data from its report page
+  for (const ev of active) {
+    try {
+      const res = await fetch(`https://gem.fabtcg.com/profile/report/${ev.id}/`, {
+        credentials: 'include',
+        headers: { 'Accept': 'text/html' }
+      });
+      if (!res.ok) continue;
+      const reportHtml = await res.text();
+      enrichActiveEventFromReport(ev, reportHtml);
+    } catch { /* skip if fetch fails */ }
+  }
+
+  return active;
+}
+
+// Parse the /profile/report/{id}/ page to fill in matches, hero, meta.
+// Active events on the player page have no match data — this supplements them.
+function enrichActiveEventFromReport(ev, html) {
+  // Hero
+  const heroMatch = html.match(/<th>Hero<\/th>\s*<td>([^<]+)<\/td>/);
+  if (heroMatch) ev.hero = heroMatch[1].trim();
+
+  // Date
+  const dateMatch = html.match(/<th>Date<\/th>\s*<td>([^<]+)<\/td>/);
+  if (dateMatch) ev.dateTime = dateMatch[1].trim();
+
+  // Venue (Organiser field in the report table)
+  const venueMatch = html.match(/<th>Organiser<\/th>[\s\S]*?<td>\s*([\s\S]*?)\s*<\/td>/);
+  if (venueMatch) ev.venue = stripTags(venueMatch[1]).trim();
+
+  // Event type (from title or table)
+  const typeMatch = html.match(/<th>Event Type<\/th>\s*<td>([^<]+)<\/td>/);
+  if (typeMatch) ev.eventType = typeMatch[1].trim();
+
+  // XP modifier
+  const xpModMatch = html.match(/<th>XP Modifier<\/th>\s*<td>(\d+)<\/td>/);
+  if (xpModMatch) ev.xpModifier = parseInt(xpModMatch[1]);
+
+  // Rated
+  const ratedMatch = html.match(/<th>Rated\?<\/th>\s*<td>([^<]+)<\/td>/);
+  if (ratedMatch) ev.isRated = ratedMatch[1].trim().toLowerCase() === 'yes';
+
+  // Format — from event type string (e.g. "Armory Event" → look for format keyword)
+  if (!ev.format) {
+    const formats = ['Classic Constructed', 'Silver Age', 'Sealed Deck', 'Blitz', 'Draft'];
+    for (const f of formats) {
+      if (html.includes(f)) { ev.format = f; break; }
+    }
+  }
+
+  // Matches — parse each row from the matches table
+  const matches = [];
+  const rowRe = /<tr>([\s\S]*?)<\/tr>/g;
+  for (const row of html.matchAll(rowRe)) {
+    const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/g)];
+    if (cells.length < 3) continue;
+
+    const round = stripTags(cells[0][1]).trim();
+    if (!round.match(/^\d+$/)) continue; // skip header rows
+
+    const oppRaw = stripTags(cells[1][1]).trim();
+    const result = stripTags(cells[2][1]).trim();
+    const record = cells[3] ? stripTags(cells[3][1]).trim() : '';
+
+    if (!['Win', 'Loss', 'Bye'].includes(result)) continue;
+
+    const oppMatch = oppRaw.match(/^(.+?)\s*\((\d+)\)\s*$/);
+    matches.push({
+      round,
+      opponentName:  oppMatch ? oppMatch[1].trim() : oppRaw,
+      opponentGemId: oppMatch ? oppMatch[2] : '',
+      result,
+      record,
+      ratingChange: null
+    });
+  }
+
+  ev.matches   = matches;
+  ev.totalWins = matches.filter(m => m.result === 'Win').length;
+  ev.xpGained  = 0; // will be determined at end of event
 }
 
 // ── PLAYER META ───────────────────────────────────────────────────────────────
@@ -226,9 +405,10 @@ function parseEventsFromHtml(html) {
     const h4Match = block.match(/<h4[^>]*class="event__title"[^>]*>([\s\S]*?)<\/h4>/);
     if (h4Match) title = stripTags(h4Match[1]).replace(/\s+/g, ' ').trim();
 
-    // Card date badge
+    // Card date badge — detect active events by the --active modifier class
     const dateBadge = block.match(/class="event__when[^"]*"[^>]*>\s*([\w.,\s]+?)\s*<\/div>/);
     const dateText = dateBadge ? dateBadge[1].trim() : '';
+    const isActive = block.includes('event__when--active');
 
     // Meta spans
     const metaBlock = block.match(/class="event__meta">([\s\S]*?)(?:<div class="btn-group"|<details\s)/);
@@ -314,6 +494,7 @@ function parseEventsFromHtml(html) {
       netRatingChange,
       matches,
       hero,
+      status: isActive ? 'active' : 'done',
       role: block.includes('event__judge-icon') ? 'judge'
           : block.includes('Scorekeeper') ? 'scorekeeper'
           : 'player',
