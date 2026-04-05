@@ -111,11 +111,26 @@ function setupButtons() {
       showEmpty();
     });
   });
+
+  // Trend date range — registered once here to prevent stacking on repeated showDashboard calls
+  document.getElementById('trend-from').addEventListener('change', () => { if (currentData) renderTab('trends'); });
+  document.getElementById('trend-to').addEventListener('change',   () => { if (currentData) renderTab('trends'); });
+  document.getElementById('trend-reset').addEventListener('click', () => {
+    if (!currentData?.events) return;
+    const dates = currentData.events
+      .map(e => parseEventDate(e.dateTime || e.dateText))
+      .filter(Boolean).sort((a, b) => a - b);
+    if (dates.length) {
+      document.getElementById('trend-from').value = toDateInput(dates[0]);
+      document.getElementById('trend-to').value   = toDateInput(dates[dates.length - 1]);
+    }
+    renderTab('trends');
+  });
 }
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.2.0';
+const CURRENT_VERSION = '1.4.0';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -167,14 +182,6 @@ function closeModal(id) {
   if (ALL_MODALS.every(m => document.getElementById(m)?.classList.contains('hidden'))) {
     document.body.style.overflow = '';
   }
-}
-
-function closeAllModals() {
-  ALL_MODALS.forEach(id => {
-    const el = document.getElementById(id);
-    if (el) el.classList.add('hidden');
-  });
-  document.body.style.overflow = '';
 }
 
 function setupModals() {
@@ -339,19 +346,6 @@ function showDashboard() {
       document.getElementById('trend-to').value = toDateInput(dates[dates.length - 1]);
     }
   }
-
-  document.getElementById('trend-from').addEventListener('change', () => renderTab('trends'));
-  document.getElementById('trend-to').addEventListener('change', () => renderTab('trends'));
-  document.getElementById('trend-reset').addEventListener('click', () => {
-    const dates = currentData.events
-      .map(e => parseEventDate(e.dateTime || e.dateText))
-      .filter(Boolean).sort((a, b) => a - b);
-    if (dates.length) {
-      document.getElementById('trend-from').value = toDateInput(dates[0]);
-      document.getElementById('trend-to').value = toDateInput(dates[dates.length - 1]);
-    }
-    renderTab('trends');
-  });
 
   showTab(activeTab);
 }
@@ -862,8 +856,11 @@ function renderEvents(events) {
     const heroCell = ev.hero
       ? `<span class="col-gold">${escHtml(ev.hero)}</span>`
       : `<span class="col-muted">–</span>`;
-    return `<tr>
-      <td class="col-dim event-date">${formatShortDate(ev.dateTime||ev.dateText)}</td>
+    const dateDisplay = ev.status === 'active'
+      ? '<span class="badge-active">⚡ Live</span>'
+      : formatShortDate(ev.dateTime||ev.dateText);
+    return `<tr${ev.status === 'active' ? ' class="event-row-active"' : ''}>
+      <td class="col-dim event-date">${dateDisplay}</td>
       <td class="event-title" title="${escHtml(ev.title)}">${ev.title}</td>
       <td class="col-dim event-format">${ev.format||'–'}</td>
       <td>${heroCell}</td>
@@ -1351,7 +1348,6 @@ function renderJudgeDetail(ev, tdata, heroes, standingsCsv) {
 
   // State
   let currentView = judgeState?.view || 'breakdown';
-  let imagesLoaded = false;
   const imgCache = {}; // heroName → cropped canvas
 
   // Preload all hero images in background
@@ -1380,7 +1376,6 @@ async function preloadImages() {
       if (img) imgCache[hero] = cropHeroSquare(img, 120);
       done++;
     }
-    imagesLoaded = true;
     if (loadingEl) loadingEl.classList.add('hidden');
     drawCurrentView();
   }
@@ -1667,7 +1662,7 @@ function drawPieView(canvas, heroEntries, total, title, imgCache) {
 }
 
 // 3. PAIRINGS with hero images
-function drawPairingsView(canvas, latestRound, tdata, heroes, title, imgCache) {
+function drawPairingsView(canvas, latestRound, _tdata, heroes, title, imgCache) {
   if (!latestRound) {
     canvas.width = 600; canvas.height = 200;
     const ctx = canvas.getContext('2d');
@@ -1788,21 +1783,6 @@ function drawStandingsView(canvas, standings, tdata, title, imgCache) {
     ctx.strokeStyle = '#ffffff08'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(18, y + rowH); ctx.lineTo(W - 18, y + rowH); ctx.stroke();
   });
-}
-
-function drawHeroBarChart(canvasId, heroEntries, total) {
-  const canvas = document.getElementById(canvasId);
-  if (!canvas) return;
-  drawBreakdownView(canvas, heroEntries, total, '', {});
-}
-
-function exportHeroChart(heroEntries, total, eventTitle) {
-  const canvas = document.createElement('canvas');
-  drawBreakdownView(canvas, heroEntries, total, eventTitle, heroImageCache);
-  const link = document.createElement('a');
-  link.download = `hero-breakdown-${Date.now()}.png`;
-  link.href = canvas.toDataURL('image/png');
-  link.click();
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
