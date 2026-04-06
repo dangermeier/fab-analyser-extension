@@ -130,7 +130,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.4.0';
+const CURRENT_VERSION = '1.4.1';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -1670,8 +1670,15 @@ function drawPairingsView(canvas, latestRound, _tdata, heroes, title, imgCache) 
     return;
   }
 
-  const heroByName = {};
-  heroes.forEach(h => { if (h.name && h.hero) heroByName[h.name.toLowerCase()] = h.hero; });
+  // Build hero lookup by GEM-ID (primary) and name (fallback)
+  // GEM-ID is reliable; name can differ between run HTML ("Schauer, Alexander")
+  // and heroes CSV ("Alexander Schauer")
+  const heroByGemId = {};
+  const heroByName  = {};
+  heroes.forEach(h => {
+    if (h.gemId && h.hero) heroByGemId[h.gemId] = h.hero;
+    if (h.name  && h.hero) heroByName[h.name.toLowerCase()] = h.hero;
+  });
 
   const W = 800, rowH = 56, padT = 76, imgS = 40;
   const H = latestRound.pairings.length * rowH + padT + 20;
@@ -1686,8 +1693,8 @@ function drawPairingsView(canvas, latestRound, _tdata, heroes, title, imgCache) 
     ctx.fillStyle = bg; ctx.fillRect(18, y, W - 36, rowH);
 
     const p1win = p.winner === 'p1', p2win = p.winner === 'p2';
-    const p1hero = heroByName[p.p1?.toLowerCase()] || null;
-    const p2hero = heroByName[p.p2?.toLowerCase()] || null;
+    const p1hero = heroByGemId[p.p1GemId] || heroByName[p.p1?.toLowerCase()] || null;
+    const p2hero = heroByGemId[p.p2GemId] || heroByName[p.p2?.toLowerCase()] || null;
 
     // Table number
     ctx.fillStyle = GOLD + '88'; ctx.font = 'bold 11px sans-serif';
@@ -1700,7 +1707,7 @@ function drawPairingsView(canvas, latestRound, _tdata, heroes, title, imgCache) 
     ctx.fillStyle = p1Color;
     ctx.font = `${p1win ? 'bold ' : ''}12px sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(p.p1 || '–', 104, cy - 5);
+    ctx.fillText(abbreviateName(p.p1), 104, cy - 5);
     if (p1hero) {
       ctx.fillStyle = GOLD + '99'; ctx.font = '10px sans-serif';
       const sh = p1hero.length > 20 ? p1hero.slice(0, 19) + '…' : p1hero;
@@ -1720,7 +1727,7 @@ function drawPairingsView(canvas, latestRound, _tdata, heroes, title, imgCache) 
     ctx.fillStyle = p2Color;
     ctx.font = `${p2win ? 'bold ' : ''}12px sans-serif`;
     ctx.textAlign = 'right';
-    ctx.fillText(p.p2 || '–', W - 104, cy - 5);
+    ctx.fillText(abbreviateName(p.p2), W - 104, cy - 5);
     if (p2hero) {
       ctx.fillStyle = GOLD + '99'; ctx.font = '10px sans-serif';
       const sh = p2hero.length > 20 ? p2hero.slice(0, 19) + '…' : p2hero;
@@ -1766,7 +1773,7 @@ function drawStandingsView(canvas, standings, tdata, title, imgCache) {
     ctx.fillStyle = i < 3 ? GOLD_L : TEXT;
     ctx.font = `${i < 3 ? 'bold ' : ''}13px sans-serif`;
     ctx.textAlign = 'left';
-    ctx.fillText(p.name || '–', 98, cy - 4);
+    ctx.fillText(abbreviateName(p.name), 98, cy - 4);
 
     // Hero name
     if (p.hero) {
@@ -1786,6 +1793,16 @@ function drawStandingsView(canvas, standings, tdata, title, imgCache) {
 }
 
 // ── HELPERS ───────────────────────────────────────────────────────────────────
+
+// "Alexander Schauer" → "A. S."  |  "Schauer, Alexander" → "A. S."
+function abbreviateName(name) {
+  if (!name) return '–';
+  const normalized = name.includes(',')
+    ? name.split(',').reverse().map(s => s.trim()).join(' ')
+    : name.trim();
+  return normalized.split(/\s+/).filter(Boolean).map(p => p[0].toUpperCase() + '.').join(' ');
+}
+
 function countWL(events) {
   let w = 0, l = 0;
   events.forEach(ev => (ev.matches || []).forEach(m => {

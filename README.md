@@ -2,7 +2,7 @@
 
 A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a personal analytics dashboard for Flesh and Blood TCG.
 
-![Version](https://img.shields.io/badge/version-1.4.0-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
+![Version](https://img.shields.io/badge/version-1.4.1-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
 
 ---
 
