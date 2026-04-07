@@ -671,10 +671,8 @@ function parseTournamentHtml(html, eventId) {
     if (!roundNumM) return;
     const roundNum = parseInt(roundNumM[1]);
 
-    // Stats
+    // Stats — only live count is needed; done/total derived from pairings
     const liveM = block.match(/Live[\s\S]*?<td><span>(\d+)<\/span>/);
-    const doneM = block.match(/(?:Fertig|Finished)[\s\S]*?<td><span>(\d+)<\/span>/);
-    const totalM = block.match(/(?:Gesamt|Total)[\s\S]*?<td><span>(\d+)<\/span>/);
 
     const pairings = [];
     // Each match row
@@ -711,11 +709,14 @@ function parseTournamentHtml(html, eventId) {
     }
 
     if (pairings.length > 0) {
+      const totalCount = pairings.length;
+      const liveCount  = liveM ? parseInt(liveM[1]) : 0;
+      const doneCount  = totalCount - liveCount;
       result.rounds.push({
         round: roundNum,
-        live: liveM ? parseInt(liveM[1]) : 0,
-        done: doneM ? parseInt(doneM[1]) : 0,
-        total: totalM ? parseInt(totalM[1]) : pairings.length,
+        live: liveCount,
+        done: doneCount,
+        total: totalCount,
         pairings
       });
     }

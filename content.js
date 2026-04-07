@@ -9,7 +9,7 @@
   const btn = document.createElement('button');
   btn.id = 'fab-stats-btn';
   btn.title = 'FAB Stats Tracker';
-  btn.innerHTML = `<p style="color: #fff; margin: unset;">FAB Stats</p>`;
+  btn.innerHTML = `<img src="${iconUrl}" style="width:28px;height:28px;display:block;border-radius:4px">`;
   btn.style.cssText = `
     position: fixed;
     bottom: 24px;

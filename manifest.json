@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "FAB Stats Tracker",
-  "version": "1.4.1",
+  "version": "1.4.2",
   "description": "Personal tournament statistics dashboard for Flesh and Blood TCG. Tracks win rates, hero performance, opponent history and XP/ELO trends from your GEM profile.",
   "permissions": [
     "storage",

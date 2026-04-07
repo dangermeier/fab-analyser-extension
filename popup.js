@@ -130,7 +130,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.4.1';
+const CURRENT_VERSION = '1.4.2';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -1510,7 +1510,7 @@ function drawBreakdownView(canvas, heroEntries, total, title, imgCache) {
     const color = COLORS[i % COLORS.length];
 
     // Hero image
-    drawHeroThumb(ctx, imgCache, hero, padL - imgS - 8, cy - imgS / 2, imgS);
+    drawHeroThumb(ctx, imgCache, hero, padL - imgS - 20, cy - imgS / 2, imgS);
 
     // Bar bg
     ctx.fillStyle = '#ffffff08';
@@ -1520,13 +1520,6 @@ function drawBreakdownView(canvas, heroEntries, total, title, imgCache) {
     g.addColorStop(0, color); g.addColorStop(1, color + '88');
     ctx.fillStyle = g;
     ctx.fillRect(padL, y + 8, barW * pct, rowH - 16);
-
-    // Rank
-    ctx.fillStyle = i < 3 ? GOLD : '#ffffff22';
-    ctx.beginPath(); ctx.arc(padL - imgS - 20, cy, 10, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = i < 3 ? '#000' : '#ffffff88';
-    ctx.font = 'bold 10px sans-serif'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(i + 1, padL - imgS - 20, cy); ctx.textBaseline = 'alphabetic';
 
     // Hero name — truncate to fit available space
     ctx.fillStyle = TEXT;
@@ -1756,15 +1749,6 @@ function drawStandingsView(canvas, standings, tdata, title, imgCache) {
     const cy = y + rowH / 2;
     const bg = i % 2 === 0 ? '#ffffff05' : '#00000010';
     ctx.fillStyle = bg; ctx.fillRect(18, y, W - 36, rowH);
-
-    // Rank
-    const rankColor = i === 0 ? '#e8c060' : i === 1 ? '#b0b8c0' : i === 2 ? '#c8835a' : TEXT_DIM;
-    ctx.fillStyle = i < 3 ? rankColor : '#ffffff22';
-    ctx.beginPath(); ctx.arc(36, cy, 14, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = i < 3 ? '#000' : TEXT_DIM;
-    ctx.font = `bold ${i < 9 ? 12 : 10}px sans-serif`;
-    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-    ctx.fillText(i + 1, 36, cy); ctx.textBaseline = 'alphabetic';
 
     // Hero image
     if (p.hero) drawHeroThumb(ctx, imgCache, p.hero, 58, cy - imgS / 2, imgS);

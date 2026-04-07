@@ -1,10 +1,16 @@
 # Changelog
+## 1.4.2 — April 2026
+
+### Changed
+- Fixing Judge tab image generation
+
+---
 
 ## 1.4.1 — April 2026
 
 ### Changed
-- Judge Tab: Spielernamen in Pairings und Standings werden aus Datenschutzgründen (DSGVO) nur noch als Initialen angezeigt (z.B. "Alexander Schauer" → "A. S.")
-- Judge Tab: Hero-Bilder in der Pairings-Ansicht werden nun zuverlässig per GEM-ID zugeordnet statt per Name-Match
+- Judge Tab: For privacy reasons (GDPR), player names in pairings and standings are now displayed only as initials (e.g., "Alexander Schauer" → "A. S.")
+- Judge Tab: Hero images in the pairings view are now reliably assigned by GEM ID instead of by name match
 
 ---
 
