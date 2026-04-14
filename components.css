@@ -317,6 +317,70 @@ select.filter-select {
 .judge-progress-bar      { background: var(--gold); height: 100%; transition: width 0.2s; }
 .judge-progress-hero     { font-size: 11px; color: var(--text-muted); }
 
+/* ── STORE TAB ───────────────────────────────────────────────────────────────── */
+
+.store-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 0 12px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+
+.store-name     { font-family: 'Cinzel', serif; font-size: 14px; color: var(--gold-light); font-weight: 600; }
+.store-sync-info { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+.store-subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 12px;
+}
+
+.store-subtab {
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  cursor: pointer;
+  color: var(--text-muted);
+  background: transparent;
+  transition: all 0.15s;
+}
+
+.store-subtab:hover { border-color: var(--gold-dim); color: var(--text); }
+.store-subtab.active { background: var(--gold-dim); border-color: var(--gold); color: var(--gold-light); }
+
+.store-event-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+.store-event-card--clickable { cursor: pointer; transition: border-color 0.15s; }
+.store-event-card--clickable:hover { border-color: var(--gold); }
+
+.store-event-row   { display: flex; align-items: center; gap: 8px; margin-bottom: 3px; }
+.store-event-title { font-size: 13px; color: var(--text); font-weight: 600; flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.store-event-date  { font-size: 11px; color: var(--text-dim); flex-shrink: 0; }
+.store-event-meta  { font-size: 11px; color: var(--text-muted); }
+.store-event-link  { font-size: 11px; color: var(--gold); margin-top: 4px; }
+
+.store-status-badge  { font-size: 10px; font-weight: 700; border-radius: 4px; padding: 1px 6px; flex-shrink: 0; }
+.store-status-active   { background: var(--win); color: #000; }
+.store-status-upcoming { background: var(--gold-dim); color: var(--gold-light); border: 1px solid var(--gold); }
+.store-status-past     { background: var(--bg-deep); color: var(--text-muted); border: 1px solid var(--border); }
+
+.small-text { font-size: 11px; color: var(--text-muted); }
+.blacklisted-row { opacity: 0.5; }
+
+.store-player-row:hover td { background: var(--bg-card); }
+.store-player-events-row td { padding: 0; border-top: none; }
+
 /* ── SETTINGS TAB ────────────────────────────────────────────────────────────── */
 .settings-section {
   background: var(--bg-card);

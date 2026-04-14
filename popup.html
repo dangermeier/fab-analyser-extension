@@ -28,6 +28,7 @@
   <div class="tab" data-tab="trends">Trends</div>
   <div class="tab" data-tab="events">Events</div>
   <div class="tab tab--hidden" id="tab-judge" data-tab="judge">⚖ Judge</div>
+  <div class="tab tab--hidden" id="tab-store" data-tab="store">🏪 Store</div>
   <div class="tab" data-tab="settings">⚙</div>
 </div>
 
@@ -129,6 +130,63 @@
       <button class="btn-back" id="judge-back-btn">← Back to list</button>
       <div id="judge-detail-content"></div>
     </div>
+  </div>
+
+  <!-- STORE / SCOREKEEPER DASHBOARD -->
+  <div class="pane" id="pane-store">
+
+    <!-- Store selector (visible when multiple stores) -->
+    <div class="filter-row" id="store-selector" style="display:none"></div>
+
+    <!-- Main store content -->
+    <div id="store-main">
+      <div class="store-header">
+        <div>
+          <div class="store-name" id="store-current-name"></div>
+          <div class="store-sync-info" id="store-sync-info"></div>
+        </div>
+        <button class="btn-scrape" id="btn-store-sync">Sync Store</button>
+      </div>
+
+      <div class="store-subtabs">
+        <div class="store-subtab active" data-subtab="events">Events</div>
+        <div class="store-subtab" data-subtab="stats">Stats</div>
+        <div class="store-subtab" data-subtab="blacklist">Blacklist</div>
+      </div>
+
+      <div id="store-events-content">
+        <div class="filter-row" id="store-filter-row"></div>
+        <div id="store-event-list"></div>
+      </div>
+
+      <div id="store-stats-content" class="hidden">
+        <div class="stat-grid" id="store-stats-grid"></div>
+        <div class="section-title">Attendance Trend</div>
+        <div id="store-attendance-trend" style="overflow-x:auto;padding:8px 0"></div>
+        <div class="section-title">Most Frequent Players</div>
+        <div id="store-players-list"></div>
+      </div>
+
+      <div id="store-blacklist-content" class="hidden">
+        <div id="store-blacklist-list"></div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div id="store-empty" class="hidden">
+      <div style="padding:24px;text-align:center;color:var(--text-muted)">
+        <div style="font-size:32px;margin-bottom:12px">🏪</div>
+        <div style="font-size:14px;font-weight:600;margin-bottom:8px;color:var(--text)">No Stores Found</div>
+        <p style="font-size:12px;line-height:1.6">Visit a store page on <strong>gem.fabtcg.com/store/</strong> while logged in as store administrator. The extension will detect it automatically.</p>
+      </div>
+    </div>
+
+    <!-- Event detail (reuses judge-style canvas views) -->
+    <div class="judge-detail" id="store-detail">
+      <button class="btn-back" id="store-back-btn">← Back to list</button>
+      <div id="store-detail-content"></div>
+    </div>
+
   </div>
 
   <!-- SETTINGS -->

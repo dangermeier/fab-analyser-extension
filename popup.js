@@ -7,6 +7,13 @@ let opponentFilter = 'all';
 let eventTypeFilter = 'all';
 let judgeState = null; // persists active judge event across tab switches and popup close/reopen
 
+// ── STORE STATE ───────────────────────────────────────────────────────────────
+let storeData = null;
+let activeStoreSlug = null;
+let storeSubtab = 'events';
+let storeStatusFilter = 'all';
+let storeDetailState = null;
+
 // ── INIT ──────────────────────────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
   applyStoredTheme();
@@ -23,9 +30,13 @@ function setupProgressListener() {
     if (message.action === 'scrapeProgress') {
       updateProgress(message.text);
     }
-    // Auto-refresh when background finishes a sync (e.g. triggered from side panel on another tab)
     if (message.action === 'dataUpdated') {
       loadStoredData();
+    }
+    if (message.action === 'storeRegistered' || message.action === 'storeUpdated') {
+      loadStoreData(() => {
+        if (activeTab === 'store') renderTab('store');
+      });
     }
   });
 }
@@ -81,7 +92,7 @@ function setupTabs() {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       tab.classList.add('active');
       activeTab = tab.dataset.tab;
-      if (currentData) showTab(activeTab);
+      if (currentData || activeTab === 'settings' || activeTab === 'store') showTab(activeTab);
     });
   });
 }
@@ -91,8 +102,12 @@ function showTab(tab) {
   const pane = document.getElementById(`pane-${tab}`);
   if (pane) {
     pane.classList.add('active');
-    // Settings tab works even without data loaded
-    if (tab === 'settings' || currentData) renderTab(tab);
+    // Settings and Store tabs work even without player data — hide status screens when switching to them
+    if (tab === 'settings' || tab === 'store') {
+      document.getElementById('status-empty')?.classList.add('hidden');
+      document.getElementById('status-loading')?.classList.add('hidden');
+    }
+    if (tab === 'settings' || tab === 'store' || currentData) renderTab(tab);
   }
 }
 
@@ -107,9 +122,49 @@ function setupButtons() {
     chrome.runtime.sendMessage({ action: 'clearData' }, () => {
       currentData = null;
       judgeState = null;
+      storeData = null;
+      activeStoreSlug = null;
+      storeDetailState = null;
       chrome.storage.local.remove('judgeStateRef');
+      updateStoreTabVisibility();
       showEmpty();
     });
+  });
+
+  // Store sync button — registered once
+  document.getElementById('btn-store-sync').addEventListener('click', () => {
+    if (!activeStoreSlug) return;
+    const btn = document.getElementById('btn-store-sync');
+    btn.disabled = true;
+    btn.textContent = 'Syncing…';
+    const infoEl = document.getElementById('store-sync-info');
+    if (infoEl) infoEl.textContent = 'Syncing…';
+    chrome.runtime.sendMessage({ action: 'scrapeStore', slug: activeStoreSlug }, response => {
+      btn.disabled = false;
+      btn.textContent = 'Sync Store';
+      if (response?.success) {
+        storeData.stores[activeStoreSlug] = response.data;
+        renderStore();
+      } else {
+        if (infoEl) infoEl.textContent = `Sync failed: ${response?.error || 'Unknown error'}`;
+      }
+    });
+  });
+
+  // Store subtab clicks — registered once (use event delegation on parent)
+  document.querySelector('.store-subtabs')?.addEventListener('click', e => {
+    const btn = e.target.closest('.store-subtab');
+    if (!btn) return;
+    storeSubtab = btn.dataset.subtab;
+    if (activeTab === 'store') renderStore();
+  });
+
+  // Store back button
+  document.getElementById('store-back-btn').addEventListener('click', () => {
+    storeDetailState = null;
+    document.getElementById('store-detail').classList.remove('judge-detail--visible');
+    document.getElementById('store-main').classList.remove('hidden');
+    renderStore();
   });
 
   // Trend date range — registered once here to prevent stacking on repeated showDashboard calls
@@ -130,7 +185,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.4.2';
+const CURRENT_VERSION = '1.5.0';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -258,17 +313,34 @@ function loadStoredData() {
   chrome.runtime.sendMessage({ action: 'getStoredData' }, response => {
     if (response && response.fabStats) {
       currentData = response.fabStats;
-      // Restore judge state from storage if available
       chrome.storage.local.get('judgeStateRef', result => {
         if (result.judgeStateRef) {
-          judgeState = result.judgeStateRef; // { evId, view }
+          judgeState = result.judgeStateRef;
         }
-        showDashboard();
+        loadStoreData(showDashboard);
       });
     } else {
-      showEmpty();
+      loadStoreData(showEmpty);
     }
   });
+}
+
+function loadStoreData(callback) {
+  chrome.runtime.sendMessage({ action: 'getStoreData' }, response => {
+    storeData = response || { stores: {} };
+    const slugs = Object.keys(storeData.stores || {});
+    if (!activeStoreSlug || !storeData.stores[activeStoreSlug]) {
+      activeStoreSlug = slugs[0] || null;
+    }
+    updateStoreTabVisibility();
+    if (callback) callback();
+  });
+}
+
+function updateStoreTabVisibility() {
+  const hasStores = storeData && Object.keys(storeData.stores || {}).length > 0;
+  const storeTab = document.getElementById('tab-store');
+  if (storeTab) storeTab.classList.toggle('tab--hidden', !hasStores);
 }
 
 function startScrape() {
@@ -365,6 +437,7 @@ function renderTab(tab) {
     case 'trends':    renderTrends(allEvents); break;
     case 'events':    renderEvents(allEvents); break;
     case 'settings':  renderSettings(); break;
+    case 'store':     renderStore(); break;
     case 'judge':
       if (judgeState) {
         document.getElementById('judge-event-list').classList.add('hidden');
@@ -1415,6 +1488,512 @@ async function preloadImages() {
   // Start: draw immediately without images, then redraw with images
   drawCurrentView();
   preloadImages();
+}
+
+// ── STORE TAB ────────────────────────────────────────────────────────────────
+
+function renderStore() {
+  const hasStores = storeData && Object.keys(storeData.stores || {}).length > 0;
+  const detail = document.getElementById('store-detail');
+  const main   = document.getElementById('store-main');
+  const empty  = document.getElementById('store-empty');
+
+  // If detail is open, leave it as-is
+  if (detail && detail.classList.contains('judge-detail--visible')) return;
+
+  if (!hasStores) {
+    main?.classList.add('hidden');
+    empty?.classList.remove('hidden');
+    return;
+  }
+  main?.classList.remove('hidden');
+  empty?.classList.add('hidden');
+
+  const store = storeData.stores[activeStoreSlug];
+  if (!store) return;
+
+  // Store selector (when multiple stores)
+  const slugs = Object.keys(storeData.stores);
+  const selectorEl = document.getElementById('store-selector');
+  if (slugs.length > 1) {
+    selectorEl.style.display = '';
+    selectorEl.innerHTML = slugs.map(sl =>
+      `<button class="filter-btn ${sl === activeStoreSlug ? 'active' : ''}" data-slug="${escHtml(sl)}">${escHtml(storeData.stores[sl].name)}</button>`
+    ).join('');
+    selectorEl.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        activeStoreSlug = btn.dataset.slug;
+        storeSubtab = 'events';
+        storeStatusFilter = 'all';
+        renderStore();
+      });
+    });
+  } else {
+    selectorEl.style.display = 'none';
+  }
+
+  // Header
+  const nameEl = document.getElementById('store-current-name');
+  const infoEl = document.getElementById('store-sync-info');
+  if (nameEl) nameEl.textContent = store.name;
+  if (infoEl) infoEl.textContent = store.lastSync ? `Last sync: ${formatDate(store.lastSync)}` : 'Not synced yet — click Sync Store';
+
+  // Subtabs
+  document.querySelectorAll('.store-subtab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.subtab === storeSubtab);
+  });
+
+  document.getElementById('store-events-content')?.classList.toggle('hidden', storeSubtab !== 'events');
+  document.getElementById('store-stats-content')?.classList.toggle('hidden', storeSubtab !== 'stats');
+  document.getElementById('store-blacklist-content')?.classList.toggle('hidden', storeSubtab !== 'blacklist');
+
+  if (storeSubtab === 'events')    renderStoreEventList(store);
+  else if (storeSubtab === 'stats')    renderStoreStats(store);
+  else if (storeSubtab === 'blacklist') renderStoreBlacklist(store);
+}
+
+function renderStoreEventList(store) {
+  const filterRow = document.getElementById('store-filter-row');
+  const filters   = ['all', 'active', 'upcoming', 'past'];
+  const labels    = { all: 'All', active: '⚡ Active', upcoming: '📅 Upcoming', past: '✓ Past' };
+  if (filterRow) {
+    filterRow.innerHTML = filters.map(f =>
+      `<button class="filter-btn ${f === storeStatusFilter ? 'active' : ''}" data-sf="${f}">${labels[f]}</button>`
+    ).join('');
+    filterRow.querySelectorAll('.filter-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        storeStatusFilter = btn.dataset.sf;
+        renderStoreEventList(store);
+      });
+    });
+  }
+
+  let events = store.events || [];
+  if (storeStatusFilter !== 'all') events = events.filter(e => e.status === storeStatusFilter);
+
+  // Sort: active first → upcoming (asc date) → past (desc date)
+  events = [...events].sort((a, b) => {
+    const order = { active: 0, upcoming: 1, past: 2 };
+    if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+    const da = parseEventDate(a.dateTime), db = parseEventDate(b.dateTime);
+    return a.status === 'past' ? (db || 0) - (da || 0) : (da || 0) - (db || 0);
+  });
+
+  const listEl = document.getElementById('store-event-list');
+  if (!listEl) return;
+
+  if (events.length === 0) {
+    listEl.innerHTML = '<div class="no-data-msg">No events found.</div>';
+    return;
+  }
+
+  const statusBadge = s => s === 'active'
+    ? `<span class="store-status-badge store-status-active">Live</span>`
+    : s === 'upcoming'
+    ? `<span class="store-status-badge store-status-upcoming">Upcoming</span>`
+    : `<span class="store-status-badge store-status-past">Past</span>`;
+
+  listEl.innerHTML = events.map(ev => {
+    const clickable = ev.status !== 'upcoming' && ev.runUrl;
+    const players   = ev.playerCount !== null ? `· ${ev.playerCount} players` : '';
+    return `
+      <div class="store-event-card ${clickable ? 'store-event-card--clickable' : ''}" data-id="${ev.id}">
+        <div class="store-event-row">
+          ${statusBadge(ev.status)}
+          <div class="store-event-title">${escHtml(ev.title)}</div>
+          <div class="store-event-date">${formatShortDate(ev.dateTime)}</div>
+        </div>
+        <div class="store-event-meta">${escHtml(ev.eventType || '')}${ev.format ? ' · ' + escHtml(ev.format) : ''}${players}</div>
+        ${clickable ? '<div class="store-event-link">Click to view tournament →</div>' : ''}
+      </div>`;
+  }).join('');
+
+  listEl.querySelectorAll('.store-event-card--clickable').forEach(card => {
+    card.addEventListener('click', () => {
+      const ev = events.find(e => e.id === card.dataset.id);
+      if (ev && ev.runUrl) openStoreEventDetail(ev);
+    });
+  });
+}
+
+function openStoreEventDetail(ev) {
+  const main   = document.getElementById('store-main');
+  const detail = document.getElementById('store-detail');
+  main?.classList.add('hidden');
+  detail?.classList.add('judge-detail--visible');
+
+  const content = document.getElementById('store-detail-content');
+  if (content) content.innerHTML = `<div class="judge-loading">Loading tournament data…</div>`;
+
+  Promise.all([
+    new Promise((res, rej) => chrome.runtime.sendMessage({ action: 'fetchTournamentData', eventId: ev.id }, r => r?.success ? res(r.data) : rej(r?.error || 'fetch failed'))),
+    new Promise(res  => chrome.runtime.sendMessage({ action: 'fetchHeroes',    eventId: ev.id }, r => res(r?.success ? r.data : []))),
+    new Promise(res  => chrome.runtime.sendMessage({ action: 'fetchStandings', eventId: ev.id }, r => res(r?.success ? r.data : [])))
+  ]).then(([tdata, heroes, standingsCsv]) => {
+    storeDetailState = { ev, tdata, heroes, standingsCsv, view: 'breakdown' };
+    renderStoreEventDetail(ev, tdata, heroes, standingsCsv);
+  }).catch(err => {
+    if (content) content.innerHTML = `<div class="judge-error">Error loading data: ${err}</div>`;
+  });
+}
+
+function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
+  const content = document.getElementById('store-detail-content');
+  if (!content) return;
+
+  // Shared prep with renderJudgeDetail
+  const heroByGemId = {}, heroByNameLower = {};
+  heroes.forEach(h => {
+    if (h.gemId && h.hero) heroByGemId[h.gemId] = h.hero;
+    if (h.name  && h.hero) heroByNameLower[h.name.toLowerCase()] = h.hero;
+  });
+
+  const standings = (standingsCsv && standingsCsv.length > 0)
+    ? standingsCsv.map(s => ({ ...s, hero: heroByGemId[s.gemId] || heroByNameLower[s.name?.toLowerCase()] || null }))
+    : buildStandings(tdata).map(s => ({ ...s, hero: heroByGemId[s.gemId] || heroByNameLower[s.name?.toLowerCase()] || s.hero || null }));
+
+  const heroCount = {};
+  heroes.forEach(h => { if (h.hero) heroCount[h.hero] = (heroCount[h.hero] || 0) + 1; });
+  const heroEntries  = Object.entries(heroCount).sort((a, b) => b[1] - a[1]);
+  const totalPlayers = heroes.length || tdata.players.length;
+  const latestRound  = tdata.rounds.length > 0 ? tdata.rounds[tdata.rounds.length - 1] : null;
+  const inProgress   = latestRound && latestRound.live > 0;
+  const eventTitle   = tdata.meta.title || ev.title;
+  const view         = storeDetailState?.view || 'breakdown';
+
+  content.innerHTML = `
+    <div class="judge-detail-header">
+      <div class="judge-detail-title">${escHtml(eventTitle)}</div>
+      <div class="judge-detail-meta">
+        <span>${tdata.meta.type || ''}</span>
+        <span>${tdata.meta.format || ''}</span>
+        <span>${totalPlayers} players</span>
+        ${tdata.meta.totalRounds ? `<span>${tdata.meta.totalRounds} rounds</span>` : ''}
+        <span class="${inProgress ? 'judge-status-live' : 'judge-status-done'}">${inProgress ? '🟢 Round ' + latestRound.round + ' live' : tdata.meta.status || 'Done'}</span>
+      </div>
+    </div>
+    <div class="judge-controls">
+      <select class="filter-select" id="store-view-select" style="flex:1;min-width:180px">
+        <option value="breakdown" ${view === 'breakdown' ? 'selected' : ''}>Hero Breakdown (bar chart)</option>
+        <option value="pie"       ${view === 'pie'       ? 'selected' : ''}>Hero Distribution (pie chart)</option>
+        <option value="pairings"  ${view === 'pairings'  ? 'selected' : ''}>Current Pairings</option>
+        <option value="standings" ${view === 'standings' ? 'selected' : ''}>Standings</option>
+      </select>
+      <button id="store-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
+      <button id="store-export-btn" class="btn-scrape" style="font-size:11px;padding:0 12px;height:28px">📥 Export PNG</button>
+    </div>
+    <div class="judge-canvas-wrap">
+      <div id="store-loading" class="judge-loading hidden"></div>
+      <canvas id="store-canvas" style="width:100%;display:block;border-radius:4px"></canvas>
+    </div>`;
+
+  let currentView = view;
+  const imgCache  = {};
+  const uniqueHeroes = [...new Set(heroes.map(h => h.hero).filter(Boolean))];
+
+  async function preloadStoreImages() {
+    const loadingEl = document.getElementById('store-loading');
+    const total = uniqueHeroes.length;
+    let done = 0;
+    const tick = hero => {
+      if (!loadingEl) return;
+      loadingEl.classList.remove('hidden');
+      loadingEl.innerHTML = `
+        <div style="font-size:12px;color:var(--text-dim);margin-bottom:6px">Loading hero images… ${done}/${total}</div>
+        <div class="judge-progress-bar-wrap"><div class="judge-progress-bar" style="width:${Math.round((done/total)*100)}%"></div></div>
+        <div class="judge-progress-hero">${hero || ''}</div>`;
+    };
+    tick('');
+    for (const hero of uniqueHeroes) {
+      tick(hero);
+      const img = await fetchHeroImage(hero);
+      if (img) imgCache[hero] = cropHeroSquare(img, 120);
+      done++;
+    }
+    loadingEl?.classList.add('hidden');
+    drawStoreView();
+  }
+
+  function drawStoreView() {
+    const canvas = document.getElementById('store-canvas');
+    if (!canvas) return;
+    switch (currentView) {
+      case 'breakdown': drawBreakdownView(canvas, heroEntries, totalPlayers, eventTitle, imgCache); break;
+      case 'pie':       drawPieView(canvas, heroEntries, totalPlayers, eventTitle, imgCache); break;
+      case 'pairings':  drawPairingsView(canvas, latestRound, tdata, heroes, eventTitle, imgCache); break;
+      case 'standings': drawStandingsView(canvas, standings, tdata, eventTitle, imgCache); break;
+    }
+  }
+
+  document.getElementById('store-view-select')?.addEventListener('change', e => {
+    currentView = e.target.value;
+    if (storeDetailState) storeDetailState.view = currentView;
+    drawStoreView();
+  });
+
+  document.getElementById('store-refresh-btn')?.addEventListener('click', () => {
+    if (!storeDetailState) return;
+    content.innerHTML = `<div class="judge-loading">Loading tournament data…</div>`;
+    Promise.all([
+      new Promise((res, rej) => chrome.runtime.sendMessage({ action: 'fetchTournamentData', eventId: ev.id }, r => r?.success ? res(r.data) : rej(r?.error))),
+      new Promise(res => chrome.runtime.sendMessage({ action: 'fetchHeroes',    eventId: ev.id }, r => res(r?.success ? r.data : []))),
+      new Promise(res => chrome.runtime.sendMessage({ action: 'fetchStandings', eventId: ev.id }, r => res(r?.success ? r.data : [])))
+    ]).then(([tdata2, heroes2, csv2]) => {
+      storeDetailState = { ...storeDetailState, tdata: tdata2, heroes: heroes2, standingsCsv: csv2 };
+      renderStoreEventDetail(storeDetailState.ev, tdata2, heroes2, csv2);
+    }).catch(err => { content.innerHTML = `<div class="judge-error">Error: ${err}</div>`; });
+  });
+
+  document.getElementById('store-export-btn')?.addEventListener('click', () => {
+    const canvas = document.getElementById('store-canvas');
+    if (!canvas) return;
+    const link = document.createElement('a');
+    link.download = `store-${currentView}-${Date.now()}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  });
+
+  drawStoreView();
+  preloadStoreImages();
+}
+
+function renderStoreStats(store) {
+  const events     = store.events || [];
+  const past       = events.filter(e => e.status === 'past');
+  const totalAtt   = past.reduce((s, e) => s + (e.playerCount || 0), 0);
+  const avgPlayers = past.length > 0 ? (totalAtt / past.length).toFixed(1) : '–';
+
+  const gridEl = document.getElementById('store-stats-grid');
+  if (gridEl) gridEl.innerHTML = `
+    <div class="stat-card"><div class="val">${events.length}</div><div class="label">Total Events</div></div>
+    <div class="stat-card"><div class="val">${past.length}</div><div class="label">Completed</div></div>
+    <div class="stat-card"><div class="val">${totalAtt}</div><div class="label">Total Attendances</div></div>
+    <div class="stat-card"><div class="val">${avgPlayers}</div><div class="label">Avg Players/Event</div></div>
+  `;
+
+  // ── Attendance trend chart ──────────────────────────────────────────────────
+  const trendEl = document.getElementById('store-attendance-trend');
+  if (trendEl) {
+    // Group past events by year-month, sum playerCount per month
+    const byMonth = {};
+    past.forEach(ev => {
+      const d = parseEventDate(ev.dateTime);
+      if (!d) return;
+      const key = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      if (!byMonth[key]) byMonth[key] = { players: 0, events: 0 };
+      byMonth[key].players += (ev.playerCount || 0);
+      byMonth[key].events++;
+    });
+
+    const months = Object.keys(byMonth).sort();
+    if (months.length < 2) {
+      trendEl.innerHTML = '<div class="pane-note" style="font-size:11px">Not enough data for a trend chart.</div>';
+    } else {
+      const maxPlayers = Math.max(...months.map(m => byMonth[m].players), 1);
+      const barW = 28, gap = 4, padL = 36, padR = 8, padT = 12, padB = 36;
+      const chartH = 100;
+      const W = padL + months.length * (barW + gap) - gap + padR;
+      const H = padT + chartH + padB;
+
+      let bars = '';
+      let labels = '';
+      let gridlines = '';
+      const gridCount = 4;
+      for (let i = 0; i <= gridCount; i++) {
+        const val = Math.round((maxPlayers / gridCount) * i);
+        const y = padT + chartH - (i / gridCount) * chartH;
+        gridlines += `<line x1="${padL}" y1="${y}" x2="${W - padR}" y2="${y}" stroke="var(--border)" stroke-dasharray="2 3" opacity="0.5"/>`;
+        gridlines += `<text x="${padL - 4}" y="${y + 4}" text-anchor="end" font-size="9" fill="var(--text-muted)">${val}</text>`;
+      }
+
+      months.forEach((m, i) => {
+        const { players, events } = byMonth[m];
+        const bH = Math.max(2, (players / maxPlayers) * chartH);
+        const x = padL + i * (barW + gap);
+        const y = padT + chartH - bH;
+        bars += `<rect x="${x}" y="${y}" width="${barW}" height="${bH}" fill="var(--gold)" opacity="0.75" rx="2">
+          <title>${m}: ${players} players, ${events} event${events !== 1 ? 's' : ''}</title>
+        </rect>`;
+        // Show label every N months to avoid overlap
+        const labelEvery = months.length > 18 ? 3 : months.length > 9 ? 2 : 1;
+        if (i % labelEvery === 0) {
+          const [yr, mo] = m.split('-');
+          const shortMo = new Date(+yr, +mo - 1, 1).toLocaleString('en-US', { month: 'short' });
+          const lx = x + barW / 2;
+          labels += `<text x="${lx}" y="${padT + chartH + 14}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${shortMo}</text>`;
+          labels += `<text x="${lx}" y="${padT + chartH + 24}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${yr.slice(2)}</text>`;
+        }
+        if (players > 0) {
+          bars += `<text x="${x + barW / 2}" y="${y - 3}" text-anchor="middle" font-size="9" fill="var(--text-muted)">${players}</text>`;
+        }
+      });
+
+      trendEl.innerHTML = `
+        <svg width="${W}" height="${H}" style="display:block;min-width:${W}px">
+          ${gridlines}
+          ${bars}
+          ${labels}
+        </svg>
+        <div style="font-size:10px;color:var(--text-muted);padding:2px 0 0 ${padL}px">Players per month (past events only)</div>`;
+    }
+  }
+
+  const playerEl = document.getElementById('store-players-list');
+  if (!playerEl) return;
+
+  const playerData = store.playerData || {};
+  const blacklist  = new Set(store.blacklist || []);
+
+  if (Object.keys(playerData).length === 0) {
+    playerEl.innerHTML = `
+      <p class="pane-note">Player data not loaded. Click below to batch-fetch from all past events.</p>
+      <button class="btn-scrape" id="store-load-players-btn" style="margin-top:8px">Load Player Data</button>`;
+    document.getElementById('store-load-players-btn')?.addEventListener('click', () => {
+      const btn = document.getElementById('store-load-players-btn');
+      if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+      chrome.runtime.sendMessage({ action: 'scrapeStorePlayerData', slug: activeStoreSlug }, response => {
+        if (response?.success) {
+          loadStoreData(() => {
+            const updated = storeData?.stores?.[activeStoreSlug];
+            if (updated && storeSubtab === 'stats') renderStoreStats(updated);
+          });
+        } else {
+          if (btn) { btn.disabled = false; btn.textContent = 'Load Player Data'; }
+        }
+      });
+    });
+    return;
+  }
+
+  const sorted = Object.entries(playerData)
+    .filter(([gemId]) => !blacklist.has(gemId))
+    .sort((a, b) => b[1].count - a[1].count)
+    .slice(0, 30);
+
+  if (sorted.length === 0) {
+    playerEl.innerHTML = '<div class="pane-note">No player data available.</div>';
+    return;
+  }
+
+  playerEl.innerHTML = `
+    <table class="data-table" id="store-players-table">
+      <thead><tr><th>#</th><th>Player</th><th>Events</th><th>Heroes</th><th></th></tr></thead>
+      <tbody>
+        ${sorted.map(([gemId, d], i) => {
+          const heroList = Object.entries(d.heroes || {}).sort((a, b) => b[1] - a[1]).map(([h]) => h).slice(0, 2).join(', ');
+          return `
+            <tr class="store-player-row" data-gid="${escHtml(gemId)}" style="cursor:pointer" title="Click to see events">
+              <td>${i + 1}</td>
+              <td><strong>${escHtml(d.name)}</strong></td>
+              <td>${d.count}</td>
+              <td class="small-text">${escHtml(heroList)}</td>
+              <td><button class="filter-btn store-block-btn" data-gid="${escHtml(gemId)}" style="font-size:10px;padding:2px 8px">Block</button></td>
+            </tr>
+            <tr class="store-player-events-row hidden" data-for="${escHtml(gemId)}">
+              <td colspan="5" style="padding:0"></td>
+            </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+
+  // Row click → expand event list
+  playerEl.querySelectorAll('.store-player-row').forEach(row => {
+    row.addEventListener('click', e => {
+      if (e.target.classList.contains('store-block-btn')) return; // let block button handle itself
+      const gemId = row.dataset.gid;
+      const detailRow = playerEl.querySelector(`.store-player-events-row[data-for="${gemId}"]`);
+      if (!detailRow) return;
+      const isOpen = !detailRow.classList.contains('hidden');
+      // Close all others
+      playerEl.querySelectorAll('.store-player-events-row').forEach(r => r.classList.add('hidden'));
+      if (isOpen) return;
+
+      const d = playerData[gemId];
+      const rawEvs = d.events || [];
+
+      if (rawEvs.length === 0) {
+        // Data was loaded before event-tracking was added — prompt reload
+        detailRow.querySelector('td').innerHTML = `
+          <div style="padding:8px 16px;font-size:11px;color:var(--text-muted)">
+            Event list not available. Click <strong>Load Player Data</strong> again to refresh.
+          </div>`;
+        detailRow.classList.remove('hidden');
+        return;
+      }
+
+      const evs = [...rawEvs].sort((a, b) => {
+        const da = parseEventDate(a.dateTime), db = parseEventDate(b.dateTime);
+        return (db || 0) - (da || 0);
+      });
+
+      const rows = evs.map(ev => `
+        <tr style="background:var(--bg-deep)">
+          <td></td>
+          <td style="padding-left:16px;font-size:12px">${escHtml(ev.title)}</td>
+          <td colspan="2" style="font-size:11px;color:var(--text-muted)">${formatShortDate(ev.dateTime)}</td>
+          <td style="font-size:11px;color:var(--text-muted)">${escHtml(ev.hero || '–')}</td>
+        </tr>`).join('');
+
+      detailRow.querySelector('td').innerHTML = `
+        <table style="width:100%;border-collapse:collapse">
+          <thead><tr style="background:var(--bg-deep)">
+            <th style="width:24px"></th>
+            <th style="font-size:11px;text-align:left;padding:4px 8px;color:var(--gold)">Event</th>
+            <th colspan="2" style="font-size:11px;text-align:left;padding:4px 8px;color:var(--gold)">Date</th>
+            <th style="font-size:11px;text-align:left;padding:4px 8px;color:var(--gold)">Hero</th>
+          </tr>${rows}</table>`;
+      detailRow.classList.remove('hidden');
+    });
+  });
+
+  // Block buttons
+  playerEl.querySelectorAll('.store-block-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bl = [...(store.blacklist || []), btn.dataset.gid];
+      chrome.runtime.sendMessage({ action: 'setStoreBlacklist', slug: activeStoreSlug, blacklist: bl }, () => {
+        store.blacklist = bl;
+        renderStoreStats(store);
+      });
+    });
+  });
+}
+
+function renderStoreBlacklist(store) {
+  const listEl    = document.getElementById('store-blacklist-list');
+  if (!listEl) return;
+  const blacklist = store.blacklist || [];
+  const playerData = store.playerData || {};
+
+  if (blacklist.length === 0) {
+    listEl.innerHTML = '<div class="pane-note">No blocked players. Block players from the Stats tab.</div>';
+    return;
+  }
+
+  listEl.innerHTML = `
+    <p class="pane-note">These players are hidden from attendance statistics.</p>
+    <table class="data-table">
+      <thead><tr><th>GEM ID</th><th>Name</th><th></th></tr></thead>
+      <tbody>
+        ${blacklist.map(gemId => {
+          const d = playerData[gemId];
+          return `<tr>
+            <td>${escHtml(gemId)}</td>
+            <td>${d ? escHtml(d.name) : '–'}</td>
+            <td><button class="filter-btn" data-gid="${escHtml(gemId)}" style="font-size:10px;padding:2px 8px">Remove</button></td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>`;
+
+  listEl.querySelectorAll('[data-gid]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const bl = (store.blacklist || []).filter(id => id !== btn.dataset.gid);
+      chrome.runtime.sendMessage({ action: 'setStoreBlacklist', slug: activeStoreSlug, blacklist: bl }, () => {
+        store.blacklist = bl;
+        renderStoreBlacklist(store);
+      });
+    });
+  });
 }
 
 // ── STANDINGS BUILDER ────────────────────────────────────────────────────────

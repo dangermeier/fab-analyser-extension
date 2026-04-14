@@ -1,4 +1,19 @@
 # Changelog
+## 1.5.0 — April 2026
+
+### Added
+
+- **Store Tab**: New 🏪 Store tab for store administrators/scorekeepers
+  - Auto-detected when visiting a GEM store page (`/store/{slug}/`) while logged in
+  - **Sync Store** button fetches all events from the store (active, upcoming, past) via the store's tournament history pages
+  - **Event list** with status filter (All / Active / Upcoming / Past) and click-to-open detail view for non-upcoming events
+  - **Tournament detail view** for past and active events: same Hero Breakdown, Pie Chart, Pairings, and Standings canvas views as the Judge tab — including PNG export
+  - **Stats tab**: total event count, completed events, total attendances, average players per event
+  - **Player Data loader**: batch-fetches heroes CSV for all past events to build a "Most Frequent Players" leaderboard
+  - **Blacklist**: block individual players (by GEM ID) from appearing in attendance statistics
+
+---
+
 ## 1.4.2 — April 2026
 
 ### Changed

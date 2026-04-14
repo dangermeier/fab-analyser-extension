@@ -79,6 +79,47 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     });
     return true;
   }
+
+  if (message.action === 'registerStore') {
+    registerStore(message.slug, message.name).then(data => {
+      sendResponse({ success: true, data });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'scrapeStore') {
+    scrapeStoreEvents(message.slug).then(data => {
+      sendResponse({ success: true, data });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'scrapeStorePlayerData') {
+    scrapeStorePlayerData(message.slug).then(data => {
+      sendResponse({ success: true, data });
+    }).catch(err => sendResponse({ success: false, error: err.message }));
+    return true;
+  }
+
+  if (message.action === 'getStoreData') {
+    chrome.storage.local.get(['storeData'], result => {
+      sendResponse(result.storeData || { stores: {} });
+    });
+    return true;
+  }
+
+  if (message.action === 'setStoreBlacklist') {
+    chrome.storage.local.get(['storeData'], result => {
+      const data = result.storeData || { stores: {} };
+      if (data.stores[message.slug]) {
+        data.stores[message.slug].blacklist = message.blacklist;
+      }
+      chrome.storage.local.set({ storeData: data }, () => {
+        sendResponse({ success: true });
+      });
+    });
+    return true;
+  }
 });
 
 // ── MAIN SCRAPER ──────────────────────────────────────────────────────────────
@@ -770,6 +811,200 @@ async function fetchHeroesCsv(eventId) {
   return parseHeroesCsv(text);
 }
 
+// ── STORE SCRAPING ────────────────────────────────────────────────────────────
+
+async function registerStore(slug, name) {
+  const stored = await chrome.storage.local.get(['storeData']);
+  const data = stored.storeData || { stores: {} };
+  if (!data.stores[slug]) {
+    const id = slug.match(/(\d+)$/)?.[1] || '';
+    data.stores[slug] = { slug, name, id, lastSync: null, events: [], blacklist: [], playerData: {} };
+    await chrome.storage.local.set({ storeData: data });
+    chrome.runtime.sendMessage({ action: 'storeRegistered', slug, name }).catch(() => {});
+  } else if (name && name !== slug && data.stores[slug].name === slug) {
+    // Update name if it was previously just the slug
+    data.stores[slug].name = name;
+    await chrome.storage.local.set({ storeData: data });
+  }
+  return data.stores[slug];
+}
+
+async function scrapeStoreEvents(slug) {
+  const stored = await chrome.storage.local.get(['storeData']);
+  const data = stored.storeData || { stores: {} };
+  if (!data.stores[slug]) {
+    const id = slug.match(/(\d+)$/)?.[1] || '';
+    data.stores[slug] = { slug, name: slug, id, lastSync: null, events: [], blacklist: [], playerData: {} };
+  }
+
+  const events = [];
+  const seenIds = new Set();
+
+  // 1. Fetch active + upcoming tournaments
+  sendProgress(`Syncing store events…`);
+  try {
+    const html = await fetchStoreHtml(`https://gem.fabtcg.com/store/${slug}/tournaments/`);
+
+    // Try to extract store name from breadcrumb
+    const breadcrumbM = html.match(/href="\/store\/[^"]+\/"[^>]*>\s*([^<]+?)\s*<\/a>/);
+    if (breadcrumbM) {
+      const extractedName = breadcrumbM[1].trim();
+      if (extractedName && extractedName !== 'Dashboard' && extractedName !== 'Tournaments') {
+        data.stores[slug].name = extractedName;
+      }
+    }
+
+    const current = parseStoreEventsFromHtml(html);
+    for (const ev of current) {
+      if (!seenIds.has(ev.id)) { events.push(ev); seenIds.add(ev.id); }
+    }
+  } catch (e) {
+    console.error('Store current events fetch failed:', e.message);
+  }
+
+  // 2. Fetch history (paginated)
+  let histPage = 1;
+  while (true) {
+    sendProgress(`Fetching store history page ${histPage}…`);
+    try {
+      const url = histPage === 1
+        ? `https://gem.fabtcg.com/store/${slug}/tournaments/history/`
+        : `https://gem.fabtcg.com/store/${slug}/tournaments/history/?page=${histPage}`;
+      const html = await fetchStoreHtml(url);
+      const histEvents = parseStoreEventsFromHtml(html);
+
+      if (histEvents.length === 0) break;
+      let anyNew = false;
+      for (const ev of histEvents) {
+        if (!seenIds.has(ev.id)) { events.push(ev); seenIds.add(ev.id); anyNew = true; }
+      }
+
+      // Check for next page
+      const hasNext = html.includes(`page=${histPage + 1}`);
+      histPage++;
+      await sleep(400);
+      if (!hasNext || !anyNew) break;
+    } catch { break; }
+  }
+
+  data.stores[slug].events = events;
+  data.stores[slug].lastSync = Date.now();
+  await chrome.storage.local.set({ storeData: data });
+  chrome.runtime.sendMessage({ action: 'storeUpdated', slug }).catch(() => {});
+  sendProgress(`Store sync complete — ${events.length} events`);
+  return data.stores[slug];
+}
+
+async function scrapeStorePlayerData(slug) {
+  const stored = await chrome.storage.local.get(['storeData']);
+  const data = stored.storeData || { stores: {} };
+  const store = data.stores[slug];
+  if (!store) throw new Error('Store not found');
+
+  const pastEvents = store.events.filter(e => e.status === 'past');
+  const playerData = {};
+
+  sendProgress(`Loading player data for ${pastEvents.length} events…`);
+
+  for (let i = 0; i < pastEvents.length; i++) {
+    const ev = pastEvents[i];
+    sendProgress(`Player data: ${i + 1} / ${pastEvents.length} — ${ev.title}`);
+    try {
+      const heroes = await fetchHeroesCsv(ev.id);
+      for (const h of heroes) {
+        if (!h.gemId) continue;
+        if (!playerData[h.gemId]) {
+          playerData[h.gemId] = { name: h.name, count: 0, heroes: {}, events: [] };
+        }
+        playerData[h.gemId].count++;
+        playerData[h.gemId].events.push({ id: ev.id, title: ev.title, dateTime: ev.dateTime, hero: h.hero || null });
+        if (h.hero) {
+          playerData[h.gemId].heroes[h.hero] = (playerData[h.gemId].heroes[h.hero] || 0) + 1;
+        }
+      }
+      await sleep(300);
+    } catch { /* skip events with no heroes CSV */ }
+  }
+
+  store.playerData = playerData;
+  await chrome.storage.local.set({ storeData: data });
+  chrome.runtime.sendMessage({ action: 'storeUpdated', slug }).catch(() => {});
+  return store;
+}
+
+async function fetchStoreHtml(url) {
+  const res = await fetch(url, { credentials: 'include', headers: { Accept: 'text/html' } });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.text();
+}
+
+function parseStoreEventsFromHtml(html) {
+  const events = [];
+  const parts = html.split(/<div class="event" id="/);
+
+  for (let i = 1; i < parts.length; i++) {
+    const block = parts[i];
+
+    const idMatch = block.match(/^(\d+)"/);
+    if (!idMatch) continue;
+    const id = idMatch[1];
+
+    // Title
+    let title = 'Unknown';
+    const h4M = block.match(/<h4[^>]*class="event__title"[^>]*>([\s\S]*?)<\/h4>/);
+    if (h4M) title = stripTags(h4M[1]).replace(/\s+/g, ' ').trim();
+
+    // Status + date text from badge
+    const whenM = block.match(/class="event__when([^"]*)"/);
+    const whenClass = whenM ? whenM[1] : '';
+    const status = whenClass.includes('--active') ? 'active'
+                 : whenClass.includes('--upcoming') ? 'upcoming'
+                 : 'past';
+
+    // Meta spans: date, eventType, format, players
+    const metaM = block.match(/class="event__meta">([\s\S]*?)(?:<div class="btn-group"|<\/div>\s*<\/div>)/);
+    const metaSpans = [];
+    if (metaM) {
+      const spanRe = /<span>([\s\S]*?)<\/span>/g;
+      let sm;
+      while ((sm = spanRe.exec(metaM[1])) !== null) {
+        const t = stripTags(sm[1]).trim();
+        if (t) metaSpans.push(t);
+      }
+    }
+
+    const monthRe = /January|February|March|April|May|June|July|August|September|October|November|December/;
+    const knownFormats = ['Classic Constructed', 'Silver Age', 'Sealed Deck', 'Blitz', 'Draft'];
+    let dateTime = null, eventType = null, format = null;
+
+    for (const span of metaSpans) {
+      if (!dateTime && (monthRe.test(span) || /\d{4},\s*\d+:\d+/.test(span))) { dateTime = span; continue; }
+      if (!format && knownFormats.some(f => span.includes(f))) { format = span; continue; }
+      if (!eventType && span.length > 3 && !span.startsWith('Players')) { eventType = span; }
+    }
+
+    // Player count
+    let playerCount = null;
+    const playersSpan = metaSpans.find(s => s.includes('Player'));
+    if (playersSpan) {
+      const cntM = playersSpan.match(/^(\d+)\s+Players?/);
+      if (cntM) playerCount = parseInt(cntM[1]);
+      else {
+        const regM = playersSpan.match(/(\d+)\s+Registered/);
+        if (regM) playerCount = parseInt(regM[1]);
+      }
+    }
+
+    // Run URL
+    const runM = block.match(/href="(\/gem\/\d+\/run\/)"/);
+    const runUrl = runM ? runM[1] : null;
+
+    events.push({ id, title, dateTime: dateTime || '', eventType, format, status, playerCount, runUrl });
+  }
+
+  return events;
+}
+
 function parseHeroesCsv(csv) {
   const lines = csv.trim().split(/\r?\n/);
   const heroes = [];
@@ -795,7 +1030,7 @@ function parseHeroesCsv(csv) {
     // Columns: Spielername, Spieler-ID, Country/Region, Held
     const name  = (parts[0] || '').trim();
     const gemId = (parts[1] || '').trim();
-    const hero  = (parts[3] || parts[2] || '').trim(); // Held is col 3, fallback col 2
+    const hero  = (parts[3] || '').trim(); // Held is col 3 — do NOT fall back to col 2 (country code)
     if (name) heroes.push({ name, gemId, hero });
   }
   return heroes;

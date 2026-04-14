@@ -5,6 +5,27 @@
 
   const iconUrl = chrome.runtime.getURL('icons/icon48.png');
 
+  // ── STORE DETECTION ──────────────────────────────────────────────────────────
+  // If on a store page, register it so the Store tab becomes available
+  const storeMatch = location.pathname.match(/^\/store\/([^/]+)\//);
+  if (storeMatch) {
+    const slug = storeMatch[1];
+    let name = slug;
+    // Try to get the store name from the account dropdown (current account)
+    const avatarCurrent = document.querySelector('.account-dropdown__avatar--current');
+    if (avatarCurrent) {
+      const parentLink = avatarCurrent.closest('a');
+      const textSpan = parentLink?.querySelector('span:not(.account-dropdown__avatar)');
+      if (textSpan) name = textSpan.firstChild?.textContent?.trim() || slug;
+    }
+    // Fallback: breadcrumb link for the store
+    if (name === slug) {
+      const bcLink = document.querySelector(`a[href*="/store/${slug}/"]`);
+      if (bcLink) name = bcLink.textContent.trim() || slug;
+    }
+    chrome.runtime.sendMessage({ action: 'registerStore', slug, name }).catch(() => {});
+  }
+
   // ── FLOATING BUTTON ─────────────────────────────────────────────────────────
   const btn = document.createElement('button');
   btn.id = 'fab-stats-btn';

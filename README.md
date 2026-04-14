@@ -2,7 +2,7 @@
 
 A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a personal analytics dashboard for Flesh and Blood TCG.
 
-![Version](https://img.shields.io/badge/version-1.4.2-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
+![Version](https://img.shields.io/badge/version-1.5.0-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
 
 ---
 
@@ -19,7 +19,7 @@ A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a 
 - Live tournament view: pairings, standings, hero distribution
 - Four exportable visual layouts: bar chart, pie chart, pairings board, standings
 - Hero card artwork pulled automatically from the card database
-- Persistent state — the extension remembers which event you had open
+- Persistent state, the extension remembers which event you had open
 - One-click refresh for live events without a full sync
 
 ---
@@ -43,7 +43,7 @@ This extension is not on the Chrome Web Store. Install it manually:
 
 **First sync:** Click **Sync Data** in the popup. The extension scrapes your GEM history page by page and stores the result locally. Depending on how many events you have, this takes 10–60 seconds.
 
-**GEM language:** Set your GEM account language to **English** (top-right dropdown on GEM) for best results. Hero names from the coverage CSVs are matched against the card database by name — English names resolve artwork correctly.
+**GEM language:** Set your GEM account language to **English** (top-right dropdown on GEM) for best results. Hero names from the coverage CSVs are matched against the card database by name, English names resolve artwork correctly.
 
 **Judge tab:** Only appears if your GEM profile includes judge or scorekeeper events. Click an event to open the live view. Use the 🔄 Refresh button to update pairings and standings without a full sync.
 
@@ -73,13 +73,13 @@ fab-analyser-extension/
 └── icons/              # Extension icons (16, 48, 128px)
 ```
 
-To contribute, fork the repo, make your changes and open a pull request. There is no bundler — edit the files directly and reload the unpacked extension in Chrome.
+To contribute, fork the repo, make your changes and open a pull request. There is no bundler, edit the files directly and reload the unpacked extension in Chrome.
 
 ---
 
 ## Acknowledgements
 
-Card data and artwork sourced from [goagain.dev](https://api.goagain.dev) — a community-maintained Flesh and Blood card database.
+Card data and artwork sourced from [goagain.dev](https://api.goagain.dev), a community-maintained Flesh and Blood card database.
 
 Flesh and Blood is a trademark of [Legend Story Studios](https://legendstory.com).
 
@@ -87,4 +87,4 @@ Flesh and Blood is a trademark of [Legend Story Studios](https://legendstory.com
 
 ## License
 
-MIT — see [LICENSE](LICENSE)
+MIT see [LICENSE](LICENSE)
