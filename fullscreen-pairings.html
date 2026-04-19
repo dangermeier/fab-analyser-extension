@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <title>Pairings — FAB Stats Tracker</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --gold: #c8972a;
+      --bg:   #0e0b07;
+      --bg2:  #1a1510;
+      --text: #e8d5b0;
+      --dim:  #666;
+      --win:  #5aad6a;
+      --border: #2a2018;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: 'Segoe UI', Arial, sans-serif;
+      height: 100vh;
+      overflow: hidden;
+      user-select: none;
+    }
+
+    /* ── HEADER ─────────────────────────────────────────────────────────── */
+    #header {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      background: var(--bg2);
+      border-bottom: 2px solid var(--border);
+      padding: 10px 24px 8px;
+      z-index: 100;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 6px;
+    }
+
+    #event-title {
+      font-size: 13px;
+      color: var(--gold);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+
+    #timer-display {
+      font-size: 5.5rem;
+      font-weight: 800;
+      font-variant-numeric: tabular-nums;
+      line-height: 1;
+      color: var(--text);
+      min-width: 6ch;
+      text-align: center;
+      transition: color 0.4s;
+    }
+
+    #timer-display.warn    { color: #f59e0b; }
+    #timer-display.expired { color: #ef4444; animation: blink 1s step-end infinite; }
+
+    @keyframes blink {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.15; }
+    }
+
+    #timer-controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .btn {
+      padding: 4px 16px;
+      border-radius: 4px;
+      border: 1px solid var(--border);
+      background: #2a2018;
+      color: var(--text);
+      font-size: 12px;
+      cursor: pointer;
+      font-weight: 700;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .btn:hover { background: #3a3028; border-color: var(--gold); }
+
+    #round-end-banner {
+      display: none;
+      background: #ef4444;
+      color: #fff;
+      font-weight: 900;
+      font-size: 20px;
+      text-align: center;
+      padding: 6px 0;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      animation: blink 0.8s step-end infinite;
+    }
+
+    #refresh-info {
+      font-size: 10px;
+      color: var(--dim);
+    }
+
+    /* ── SCROLL AREA ────────────────────────────────────────────────────── */
+    #scroll-container {
+      position: fixed;
+      left: 0; right: 0; bottom: 0;
+      overflow: hidden;
+    }
+
+    #scroll-inner {
+      will-change: transform;
+    }
+
+    .round-title {
+      text-align: center;
+      font-size: 1.2rem;
+      font-weight: 700;
+      color: var(--gold);
+      padding: 18px 24px 10px;
+      letter-spacing: 0.06em;
+      text-transform: uppercase;
+    }
+
+    .pairings-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 1.2rem;
+    }
+
+    .pairings-table tr { border-bottom: 1px solid var(--border); }
+    .pairings-table tr:nth-child(even) { background: #ffffff04; }
+
+    .pairings-table td {
+      padding: 14px 20px;
+      vertical-align: middle;
+    }
+
+    .td-table {
+      width: 60px;
+      text-align: center;
+      font-size: 0.72rem;
+      font-weight: 800;
+      color: var(--gold);
+      opacity: 0.65;
+      white-space: nowrap;
+    }
+
+    .td-player       { width: calc(50% - 90px); }
+    .td-player.right { text-align: right; }
+    .td-vs           { width: 90px; text-align: center; font-size: 0.8rem; color: var(--dim); font-weight: 700; }
+    .td-vs.done      { color: var(--win); }
+
+    .player-name { font-weight: 600; display: block; }
+    .player-hero { font-size: 0.75rem; color: var(--gold); opacity: 0.75; display: block; margin-top: 3px; }
+
+    .state-win  .player-name { color: var(--win); }
+    .state-lose .player-name { color: var(--dim); }
+    .state-bye  .player-name { color: var(--dim); font-style: italic; }
+
+    #no-data {
+      text-align: center;
+      padding: 80px 24px;
+      color: var(--dim);
+      font-size: 1rem;
+    }
+  </style>
+</head>
+<body>
+
+<div id="header">
+  <div id="event-title">Loading…</div>
+  <div id="timer-display">––:––</div>
+  <div id="timer-controls">
+    <button class="btn" id="btn-55">55 min</button>
+    <button class="btn" id="btn-35">35 min</button>
+    <button class="btn" id="btn-start">▶ Start</button>
+    <button class="btn" id="btn-pause" style="display:none">⏸ Pause</button>
+    <button class="btn" id="btn-reset" style="display:none">↺ Reset</button>
+  </div>
+  <div id="round-end-banner">⏰ ROUND ENDED — TIME IS UP</div>
+  <div id="refresh-info"></div>
+</div>
+
+<div id="scroll-container">
+  <div id="scroll-inner">
+    <div id="no-data">Loading pairings…</div>
+  </div>
+</div>
+
+<script src="fullscreen-pairings.js"></script>
+</body>
+</html>

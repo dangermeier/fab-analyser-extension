@@ -1,4 +1,30 @@
 # Changelog
+
+## 1.6.0 — April 2026
+
+### Added
+
+- **Fullscreen Pairings View**: New `⛶ Pairings Fullscreen` button in Judge and Store event detail views opens a dedicated fullscreen tab (`fullscreen-pairings.html`) showing current pairings for display on a projector or monitor
+  - **Round Timer**: 55-minute and 35-minute presets with Start / Pause / Reset controls
+  - Timer turns **orange** in the last 5 minutes, **red + blinking** when time is up, and shows a "ROUND ENDED" banner
+  - **Auto-refresh** every 60 seconds — pairings update automatically without manual reload
+  - **Auto-scroll**: if pairings overflow the screen, the view slowly scrolls from top to bottom and back (50 px/s, 3-second pause at each end)
+- **Unknown hero placeholder** (`?`) in Hero Breakdown and Pie Chart: players without a hero assignment are now counted and displayed as `?` instead of being silently excluded
+
+### Changed
+
+- Store tab is now auto-discovered on **any GEM page** — the background fetches `/store/` and scans the current page's DOM for store links, so the tab appears even without visiting a store URL directly
+- Store tab visibility is checked immediately on popup open (with one retry via `discoverStores`) — eliminates the need to reload after first store registration
+- Fullscreen pairings view shows **player names only** (no hero names) for a cleaner, more readable display
+
+### Fixed
+
+- `parseHeroesCsv`: hero fallback no longer uses the Country/Region column (`DE`) when the hero field is empty — only column 3 is used
+- Player event list in Store Stats now shows a helpful message instead of an empty table when data was loaded with an older format that didn't include event arrays
+- Hero Breakdown and Pie Chart: `heroCount` now includes players without hero data (counted as `?`) instead of skipping them
+
+---
+
 ## 1.5.0 — April 2026
 
 ### Added

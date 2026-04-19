@@ -80,6 +80,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  if (message.action === 'openTab') {
+    chrome.tabs.create({ url: message.url });
+    sendResponse({ success: true });
+    return true;
+  }
+
+  if (message.action === 'discoverStores') {
+    discoverStores().then(slugs => sendResponse({ success: true, slugs }))
+      .catch(() => sendResponse({ success: false }));
+    return true;
+  }
+
   if (message.action === 'registerStore') {
     registerStore(message.slug, message.name).then(data => {
       sendResponse({ success: true, data });
@@ -813,6 +825,32 @@ async function fetchHeroesCsv(eventId) {
 
 // ── STORE SCRAPING ────────────────────────────────────────────────────────────
 
+async function discoverStores() {
+  const res = await fetch('https://gem.fabtcg.com/store/', { credentials: 'include' });
+  if (!res.ok) return [];
+  const html = await res.text();
+  // Match store admin links: /store/{slug}/ where slug ends with numeric store ID
+  const re = /href="\/store\/([a-z0-9][a-z0-9-]+-\d+)\/"/gi;
+  const found = new Map();
+  let m;
+  while ((m = re.exec(html)) !== null) {
+    const slug = m[1].toLowerCase();
+    if (found.has(slug)) continue;
+    // Extract store name from nearby anchor text
+    const after = html.substring(m.index, m.index + 300);
+    const nameMatch = after.match(/href="\/store\/[^"]+">([^<]+)</);
+    const name = nameMatch ? nameMatch[1].trim() : slug;
+    found.set(slug, name);
+  }
+  if (found.size === 0) return [];
+  for (const [slug, name] of found) {
+    await registerStore(slug, name);
+  }
+  // Always broadcast so popup refreshes tab visibility
+  chrome.runtime.sendMessage({ action: 'storeRegistered' }).catch(() => {});
+  return [...found.keys()];
+}
+
 async function registerStore(slug, name) {
   const stored = await chrome.storage.local.get(['storeData']);
   const data = stored.storeData || { stores: {} };
@@ -822,9 +860,9 @@ async function registerStore(slug, name) {
     await chrome.storage.local.set({ storeData: data });
     chrome.runtime.sendMessage({ action: 'storeRegistered', slug, name }).catch(() => {});
   } else if (name && name !== slug && data.stores[slug].name === slug) {
-    // Update name if it was previously just the slug
     data.stores[slug].name = name;
     await chrome.storage.local.set({ storeData: data });
+    chrome.runtime.sendMessage({ action: 'storeRegistered', slug, name }).catch(() => {});
   }
   return data.stores[slug];
 }

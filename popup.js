@@ -185,7 +185,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.5.0';
+const CURRENT_VERSION = '1.6.0';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -325,7 +325,7 @@ function loadStoredData() {
   });
 }
 
-function loadStoreData(callback) {
+function loadStoreData(callback, _retry = false) {
   chrome.runtime.sendMessage({ action: 'getStoreData' }, response => {
     storeData = response || { stores: {} };
     const slugs = Object.keys(storeData.stores || {});
@@ -334,6 +334,12 @@ function loadStoreData(callback) {
     }
     updateStoreTabVisibility();
     if (callback) callback();
+    // If no stores found on first load, ask background to discover now (handles race with content.js)
+    if (slugs.length === 0 && !_retry) {
+      chrome.runtime.sendMessage({ action: 'discoverStores' }, () => {
+        loadStoreData(null, true);
+      });
+    }
   });
 }
 
@@ -1381,8 +1387,8 @@ function renderJudgeDetail(ev, tdata, heroes, standingsCsv) {
   // Hero count
   const heroCount = {};
   heroes.forEach(h => {
-    if (!h.hero) return;
-    heroCount[h.hero] = (heroCount[h.hero] || 0) + 1;
+    const key = h.hero || '?';
+    heroCount[key] = (heroCount[key] || 0) + 1;
   });
   const heroEntries = Object.entries(heroCount).sort((a, b) => b[1] - a[1]);
   const totalPlayers = heroes.length || tdata.players.length;
@@ -1411,6 +1417,7 @@ function renderJudgeDetail(ev, tdata, heroes, standingsCsv) {
         <option value="standings" ${judgeState?.view === 'standings' ? 'selected' : ''}>Standings</option>
       </select>
       <button id="judge-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
+      <button id="judge-fullscreen-btn" class="filter-btn" title="Open pairings in fullscreen">⛶ Pairings Fullscreen</button>
       <button id="judge-export-btn" class="btn-scrape" style="font-size:11px;padding:0 12px;height:28px">📥 Export PNG</button>
     </div>
 
@@ -1474,6 +1481,12 @@ async function preloadImages() {
 
   document.getElementById('judge-refresh-btn').addEventListener('click', () => {
     if (judgeState) loadJudgeDetail(judgeState.ev);
+  });
+
+  document.getElementById('judge-fullscreen-btn').addEventListener('click', () => {
+    const url = chrome.runtime.getURL('fullscreen-pairings.html') +
+      `?evId=${encodeURIComponent(ev.id)}&title=${encodeURIComponent(ev.title || '')}`;
+    chrome.runtime.sendMessage({ action: 'openTab', url });
   });
 
   document.getElementById('judge-export-btn').addEventListener('click', () => {
@@ -1653,7 +1666,7 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
     : buildStandings(tdata).map(s => ({ ...s, hero: heroByGemId[s.gemId] || heroByNameLower[s.name?.toLowerCase()] || s.hero || null }));
 
   const heroCount = {};
-  heroes.forEach(h => { if (h.hero) heroCount[h.hero] = (heroCount[h.hero] || 0) + 1; });
+  heroes.forEach(h => { const key = h.hero || '?'; heroCount[key] = (heroCount[key] || 0) + 1; });
   const heroEntries  = Object.entries(heroCount).sort((a, b) => b[1] - a[1]);
   const totalPlayers = heroes.length || tdata.players.length;
   const latestRound  = tdata.rounds.length > 0 ? tdata.rounds[tdata.rounds.length - 1] : null;
@@ -1680,6 +1693,7 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
         <option value="standings" ${view === 'standings' ? 'selected' : ''}>Standings</option>
       </select>
       <button id="store-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
+      <button id="store-fullscreen-btn" class="filter-btn" title="Open pairings in fullscreen">⛶ Pairings Fullscreen</button>
       <button id="store-export-btn" class="btn-scrape" style="font-size:11px;padding:0 12px;height:28px">📥 Export PNG</button>
     </div>
     <div class="judge-canvas-wrap">
@@ -1742,6 +1756,12 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
       storeDetailState = { ...storeDetailState, tdata: tdata2, heroes: heroes2, standingsCsv: csv2 };
       renderStoreEventDetail(storeDetailState.ev, tdata2, heroes2, csv2);
     }).catch(err => { content.innerHTML = `<div class="judge-error">Error: ${err}</div>`; });
+  });
+
+  document.getElementById('store-fullscreen-btn')?.addEventListener('click', () => {
+    const url = chrome.runtime.getURL('fullscreen-pairings.html') +
+      `?evId=${encodeURIComponent(ev.id)}&title=${encodeURIComponent(ev.title || '')}`;
+    chrome.runtime.sendMessage({ action: 'openTab', url });
   });
 
   document.getElementById('store-export-btn')?.addEventListener('click', () => {
