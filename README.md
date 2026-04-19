@@ -114,6 +114,14 @@ Flesh and Blood is a trademark of [Legend Story Studios](https://legendstory.com
 
 ---
 
+## Support
+
+If this extension saves you time at your events, a coffee is always appreciated.
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-dangermeier-FFDD00?style=flat&logo=buy-me-a-coffee&logoColor=black)](https://buymeacoffee.com/dangermeier)
+
+---
+
 ## License
 
 MIT see [LICENSE](LICENSE)
