@@ -21,7 +21,7 @@ A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a 
 
 * Live tournament view with four exportable canvas layouts: hero breakdown bar chart, hero distribution pie chart, pairings board, and standings table
 * Hero card artwork loaded automatically from the card database and cropped to portrait square
-* Persistent state across popup open/close — picks up the last open event and view
+* Persistent state across popup open/close, picks up the last open event and view
 * One-click Refresh for live events without a full data sync
 * PNG export for every canvas view
 
@@ -36,7 +36,7 @@ A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a 
 
 **Store Administration** *(new in v1.5)*
 
-* Store tab appears automatically once the extension detects a store linked to your GEM account — no manual setup
+* Store tab appears automatically once the extension detects a store linked to your GEM account, no manual setup
 * Sync fetches the complete event history (active, upcoming, past)
 * Per-event detail view with the same four canvas views and PNG export as the Judge tab
 * Attendance trend chart showing player counts per month across all past events
