@@ -2,7 +2,7 @@
 
 A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a personal analytics dashboard for Flesh and Blood TCG.
 
-![Version](https://img.shields.io/badge/version-1.6.0-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
+![Version](https://img.shields.io/badge/version-1.7.0-gold) ![License](https://img.shields.io/badge/license-MIT-blue) ![Platform](https://img.shields.io/badge/platform-Chrome-green)
 
 ---
 
@@ -19,26 +19,28 @@ A Chrome extension that turns your [GEM](https://gem.fabtcg.com) profile into a 
 
 **Judge & Scorekeeper Tools**
 
-* Live tournament view with four exportable canvas layouts: hero breakdown bar chart, hero distribution pie chart, pairings board, and standings table
+* Live tournament view with five exportable canvas layouts: hero breakdown bar chart, hero distribution pie chart, pairings board, standings table, and Top Cut elimination bracket
+* Top Cut bracket traces Quarters → Semis → Finals with hero artwork, win/loss colouring and a Champion label; renders at 2× resolution for crisp PNG export
 * Hero card artwork loaded automatically from the card database and cropped to portrait square
 * Persistent state across popup open/close, picks up the last open event and view
 * One-click Refresh for live events without a full data sync
 * PNG export for every canvas view
 
-**Fullscreen Pairings Display** *(new in v1.6)*
+**Fullscreen Pairings Display** *(v1.6)*
 
 * Opens as a dedicated browser tab, designed for projector or monitor display
-* Current round pairings in large, high-contrast text
-* Auto-refresh every 60 seconds
+* Current round pairings in large, high-contrast text with auto-refresh every 60 seconds
 * Built-in round timer with 55-minute and 35-minute presets and Start / Pause / Reset controls
 * Timer turns orange in the last 5 minutes, red and blinking at zero with a "ROUND ENDED" banner
 * Auto-scroll when pairings exceed the screen height: slow top-to-bottom loop with pause at each end
+* Toggle to the Top Cut bracket view mid-event; bracket fills the full screen at any resolution
 
-**Store Administration** *(new in v1.5)*
+**Store Administration** *(v1.5)*
 
 * Store tab appears automatically once the extension detects a store linked to your GEM account, no manual setup
 * Sync fetches the complete event history (active, upcoming, past)
-* Per-event detail view with the same four canvas views and PNG export as the Judge tab
+* Per-event detail split into two tabs: **Bildergenerierung** for the five canvas views and PNG export, **Store Tools** for event management utilities
+* **Prize Draw**: set a winner count and a prize label per placement, then draw random winners from the event's player pool — names shown as initials plus GEM ID
 * Attendance trend chart showing player counts per month across all past events
 * Most Frequent Players leaderboard ranked by attendance, expandable to show per-player event history
 * Blacklist to exclude players (e.g. judges or placeholder accounts) from attendance statistics

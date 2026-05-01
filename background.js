@@ -706,23 +706,25 @@ function parseTournamentHtml(html, eventId) {
       // format: "LastName, FirstName (GEMID)  HeroName"
       const playerM = row.match(/^(.+?)\s*\((\d+)\)\s*(.*)/);
       if (playerM) {
+        const heroRaw = playerM[3].trim();
         result.players.push({
           name: playerM[1].trim(),
           gemId: playerM[2],
-          hero: playerM[3].trim() || null
+          hero: heroRaw ? heroRaw.replace(/\s*\([A-Z]{1,4}\)\s*$/, '').trim() : null
         });
       }
     }
   }
 
-  // Rounds — find all "Runde N (Swiss)" / "Round N" blocks
-  const roundBlocks = html.split(/(?=<div class="content-card">[\s\S]*?<div class="swiss">)/);
+  // Rounds — find all round blocks (Swiss and Elimination Playoffs)
+  const roundBlocks = html.split(/(?=<div class="content-card">)/);
   roundBlocks.forEach(block => {
-    if (!block.includes('swiss')) return;
+    if (!block.includes('match-row')) return;
 
     const roundNumM = block.match(/(?:Runde|Round)\s+(\d+)/);
     if (!roundNumM) return;
     const roundNum = parseInt(roundNumM[1]);
+    const isElimination = /elimination|playoff/i.test(block.substring(0, 500));
 
     // Stats — only live count is needed; done/total derived from pairings
     const liveM = block.match(/Live[\s\S]*?<td><span>(\d+)<\/span>/);
@@ -767,6 +769,7 @@ function parseTournamentHtml(html, eventId) {
       const doneCount  = totalCount - liveCount;
       result.rounds.push({
         round: roundNum,
+        elimination: isElimination,
         live: liveCount,
         done: doneCount,
         total: totalCount,
@@ -836,22 +839,22 @@ async function discoverStores() {
   while ((m = re.exec(html)) !== null) {
     const slug = m[1].toLowerCase();
     if (found.has(slug)) continue;
-    // Extract store name from nearby anchor text
-    const after = html.substring(m.index, m.index + 300);
-    const nameMatch = after.match(/href="\/store\/[^"]+">([^<]+)</);
-    const name = nameMatch ? nameMatch[1].trim() : slug;
+    // Look backward for the nearest heading — that's the authoritative store name
+    const before = html.substring(Math.max(0, m.index - 800), m.index);
+    const headings = [...before.matchAll(/<(?:h[1-4])[^>]*>([^<]+)<\/h[1-4]>/gi)];
+    const name = headings.length > 0 ? headings[headings.length - 1][1].trim() : slug;
     found.set(slug, name);
   }
   if (found.size === 0) return [];
   for (const [slug, name] of found) {
-    await registerStore(slug, name);
+    await registerStore(slug, name, true); // force=true: heading is authoritative
   }
   // Always broadcast so popup refreshes tab visibility
   chrome.runtime.sendMessage({ action: 'storeRegistered' }).catch(() => {});
   return [...found.keys()];
 }
 
-async function registerStore(slug, name) {
+async function registerStore(slug, name, forceUpdate = false) {
   const stored = await chrome.storage.local.get(['storeData']);
   const data = stored.storeData || { stores: {} };
   if (!data.stores[slug]) {
@@ -859,7 +862,7 @@ async function registerStore(slug, name) {
     data.stores[slug] = { slug, name, id, lastSync: null, events: [], blacklist: [], playerData: {} };
     await chrome.storage.local.set({ storeData: data });
     chrome.runtime.sendMessage({ action: 'storeRegistered', slug, name }).catch(() => {});
-  } else if (name && name !== slug && data.stores[slug].name === slug) {
+  } else if (name && name !== slug && (forceUpdate || data.stores[slug].name === slug)) {
     data.stores[slug].name = name;
     await chrome.storage.local.set({ storeData: data });
     chrome.runtime.sendMessage({ action: 'storeRegistered', slug, name }).catch(() => {});
@@ -1068,7 +1071,8 @@ function parseHeroesCsv(csv) {
     // Columns: Spielername, Spieler-ID, Country/Region, Held
     const name  = (parts[0] || '').trim();
     const gemId = (parts[1] || '').trim();
-    const hero  = (parts[3] || '').trim(); // Held is col 3 — do NOT fall back to col 2 (country code)
+    const heroRaw = (parts[3] || '').trim(); // Held is col 3 — do NOT fall back to col 2 (country code)
+    const hero = heroRaw.replace(/\s*\([A-Z]{1,4}\)\s*$/, '').trim();
     if (name) heroes.push({ name, gemId, hero });
   }
   return heroes;

@@ -185,7 +185,7 @@ function setupButtons() {
 
 // ── SETTINGS TAB ─────────────────────────────────────────────────────────────
 
-const CURRENT_VERSION = '1.6.0';
+const CURRENT_VERSION = '1.7.0';
 const GITHUB_RELEASE_API = 'https://api.github.com/repos/dangermeier/fab-analyser-extension/releases/latest';
 
 function renderSettings() {
@@ -1396,6 +1396,7 @@ function renderJudgeDetail(ev, tdata, heroes, standingsCsv) {
   const latestRound = tdata.rounds.length > 0 ? tdata.rounds[tdata.rounds.length - 1] : null;
   const inProgress = latestRound && latestRound.live > 0;
   const eventTitle = tdata.meta.title || ev.title;
+  const hasElimination = tdata.rounds.some(r => r.elimination);
 
   content.innerHTML = `
     <div class="judge-detail-header">
@@ -1415,6 +1416,7 @@ function renderJudgeDetail(ev, tdata, heroes, standingsCsv) {
         <option value="pie" ${judgeState?.view === 'pie' ? 'selected' : ''}>Hero Distribution (pie chart)</option>
         <option value="pairings" ${judgeState?.view === 'pairings' ? 'selected' : ''}>Current Pairings</option>
         <option value="standings" ${judgeState?.view === 'standings' ? 'selected' : ''}>Standings</option>
+        ${hasElimination ? `<option value="bracket" ${judgeState?.view === 'bracket' ? 'selected' : ''}>Top Cut</option>` : ''}
       </select>
       <button id="judge-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
       <button id="judge-fullscreen-btn" class="filter-btn" title="Open pairings in fullscreen">⛶ Pairings Fullscreen</button>
@@ -1468,6 +1470,7 @@ async function preloadImages() {
       case 'pie':       drawPieView(canvas, heroEntries, totalPlayers, eventTitle, imgCache); break;
       case 'pairings':  drawPairingsView(canvas, latestRound, tdata, heroes, eventTitle, imgCache); break;
       case 'standings': drawStandingsView(canvas, standings, tdata, eventTitle, imgCache); break;
+      case 'bracket':   drawBracketView(canvas, tdata, heroes, standings, eventTitle, imgCache); break;
     }  }
 
   document.getElementById('judge-view-select').addEventListener('change', e => {
@@ -1531,9 +1534,9 @@ function renderStore() {
   if (slugs.length > 1) {
     selectorEl.style.display = '';
     selectorEl.innerHTML = slugs.map(sl =>
-      `<button class="filter-btn ${sl === activeStoreSlug ? 'active' : ''}" data-slug="${escHtml(sl)}">${escHtml(storeData.stores[sl].name)}</button>`
+      `<button class="store-tab ${sl === activeStoreSlug ? 'active' : ''}" data-slug="${escHtml(sl)}">${escHtml(storeData.stores[sl].name)}</button>`
     ).join('');
-    selectorEl.querySelectorAll('.filter-btn').forEach(btn => {
+    selectorEl.querySelectorAll('.store-tab').forEach(btn => {
       btn.addEventListener('click', () => {
         activeStoreSlug = btn.dataset.slug;
         storeSubtab = 'events';
@@ -1673,6 +1676,8 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
   const inProgress   = latestRound && latestRound.live > 0;
   const eventTitle   = tdata.meta.title || ev.title;
   const view         = storeDetailState?.view || 'breakdown';
+  const hasElimination = tdata.rounds.some(r => r.elimination);
+  const isDraw       = view === 'draw';
 
   content.innerHTML = `
     <div class="judge-detail-header">
@@ -1685,20 +1690,32 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
         <span class="${inProgress ? 'judge-status-live' : 'judge-status-done'}">${inProgress ? '🟢 Round ' + latestRound.round + ' live' : tdata.meta.status || 'Done'}</span>
       </div>
     </div>
-    <div class="judge-controls">
-      <select class="filter-select" id="store-view-select" style="flex:1;min-width:180px">
-        <option value="breakdown" ${view === 'breakdown' ? 'selected' : ''}>Hero Breakdown (bar chart)</option>
-        <option value="pie"       ${view === 'pie'       ? 'selected' : ''}>Hero Distribution (pie chart)</option>
-        <option value="pairings"  ${view === 'pairings'  ? 'selected' : ''}>Current Pairings</option>
-        <option value="standings" ${view === 'standings' ? 'selected' : ''}>Standings</option>
-      </select>
-      <button id="store-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
-      <button id="store-fullscreen-btn" class="filter-btn" title="Open pairings in fullscreen">⛶ Pairings Fullscreen</button>
-      <button id="store-export-btn" class="btn-scrape" style="font-size:11px;padding:0 12px;height:28px">📥 Export PNG</button>
+    <div class="store-switcher" style="margin-bottom:0">
+      <button class="store-tab ${!isDraw ? 'active' : ''}" data-panel="images">📊 Bildergenerierung</button>
+      <button class="store-tab ${isDraw  ? 'active' : ''}" data-panel="tools">🛠 Store Tools</button>
     </div>
-    <div class="judge-canvas-wrap">
-      <div id="store-loading" class="judge-loading hidden"></div>
-      <canvas id="store-canvas" style="width:100%;display:block;border-radius:4px"></canvas>
+    <div id="store-images-panel"${isDraw ? ' class="hidden"' : ''}>
+      <div class="judge-controls" style="margin-top:12px">
+        <select class="filter-select" id="store-view-select" style="flex:1;min-width:180px">
+          <option value="breakdown" ${view === 'breakdown' ? 'selected' : ''}>Hero Breakdown (bar chart)</option>
+          <option value="pie"       ${view === 'pie'       ? 'selected' : ''}>Hero Distribution (pie chart)</option>
+          <option value="pairings"  ${view === 'pairings'  ? 'selected' : ''}>Current Pairings</option>
+          <option value="standings" ${view === 'standings' ? 'selected' : ''}>Standings</option>
+          ${hasElimination ? `<option value="bracket" ${view === 'bracket' ? 'selected' : ''}>Top Cut</option>` : ''}
+        </select>
+        <button id="store-refresh-btn" class="filter-btn" title="Refresh this event">🔄 Refresh</button>
+        <button id="store-export-btn" class="btn-scrape" style="font-size:11px;padding:0 12px;height:28px">📥 Export PNG</button>
+      </div>
+      <div class="judge-canvas-wrap">
+        <div id="store-loading" class="judge-loading hidden"></div>
+        <canvas id="store-canvas" style="width:100%;display:block;border-radius:4px"></canvas>
+      </div>
+    </div>
+    <div id="store-tools-panel"${!isDraw ? ' class="hidden"' : ''} style="margin-top:12px">
+      <div style="margin-bottom:10px">
+        <button id="store-fullscreen-btn" class="filter-btn" title="Open pairings in fullscreen">⛶ Pairings Fullscreen</button>
+      </div>
+      <div id="store-draw-panel"></div>
     </div>`;
 
   let currentView = view;
@@ -1729,6 +1746,19 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
   }
 
   function drawStoreView() {
+    const isTools = currentView === 'draw';
+    document.getElementById('store-images-panel')?.classList.toggle('hidden', isTools);
+    document.getElementById('store-tools-panel')?.classList.toggle('hidden', !isTools);
+    content.querySelectorAll('.store-tab[data-panel]').forEach(t => {
+      t.classList.toggle('active', t.dataset.panel === (isTools ? 'tools' : 'images'));
+    });
+
+    if (isTools) {
+      const players = heroes.length > 0 ? heroes : tdata.players;
+      renderPrizeDrawView(document.getElementById('store-draw-panel'), players);
+      return;
+    }
+
     const canvas = document.getElementById('store-canvas');
     if (!canvas) return;
     switch (currentView) {
@@ -1736,8 +1766,21 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
       case 'pie':       drawPieView(canvas, heroEntries, totalPlayers, eventTitle, imgCache); break;
       case 'pairings':  drawPairingsView(canvas, latestRound, tdata, heroes, eventTitle, imgCache); break;
       case 'standings': drawStandingsView(canvas, standings, tdata, eventTitle, imgCache); break;
+      case 'bracket':   drawBracketView(canvas, tdata, heroes, standings, eventTitle, imgCache); break;
     }
   }
+
+  content.querySelectorAll('.store-tab[data-panel]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.dataset.panel === 'tools') {
+        currentView = 'draw';
+      } else {
+        if (currentView === 'draw') currentView = 'breakdown';
+      }
+      if (storeDetailState) storeDetailState.view = currentView;
+      drawStoreView();
+    });
+  });
 
   document.getElementById('store-view-select')?.addEventListener('change', e => {
     currentView = e.target.value;
@@ -1775,6 +1818,76 @@ function renderStoreEventDetail(ev, tdata, heroes, standingsCsv) {
 
   drawStoreView();
   preloadStoreImages();
+}
+
+function renderPrizeDrawView(wrap, players) {
+  const MAX = Math.min(players.length, 8);
+  const medals = ['🥇', '🥈', '🥉', '4.', '5.', '6.', '7.', '8.'];
+
+  function getState() {
+    const count  = Math.max(1, Math.min(MAX, parseInt(wrap.querySelector('#pd-count')?.value) || 2));
+    const prizes = Array.from(wrap.querySelectorAll('.pd-prize')).map(el => el.value);
+    return { count, prizes };
+  }
+
+  function draw(count) {
+    const pool = [...players];
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    return pool.slice(0, count);
+  }
+
+  function render(count, prizes, results) {
+    count = Math.max(1, Math.min(MAX, count));
+    prizes = prizes.slice(0, count);
+    while (prizes.length < count) prizes.push('');
+
+    wrap.innerHTML = `
+      <div class="prize-draw-panel">
+        <div class="prize-draw-row">
+          <label class="prize-draw-label">Anzahl Gewinner</label>
+          <input type="number" id="pd-count" class="prize-draw-count" min="1" max="${MAX}" value="${count}">
+          <span class="prize-draw-hint">(${MAX} Spieler im Pool)</span>
+        </div>
+        <div id="pd-prize-list">
+          ${prizes.map((p, i) => `
+            <div class="prize-draw-row">
+              <label class="prize-draw-label">${medals[i]} Preis</label>
+              <input type="text" class="pd-prize prize-draw-input" data-i="${i}" placeholder="z.B. Booster Box" value="${escHtml(p)}">
+            </div>`).join('')}
+        </div>
+        <div class="prize-draw-actions">
+          <button id="pd-draw-btn" class="btn-scrape">🎲 Ziehen</button>
+        </div>
+        ${results ? `
+        <div class="prize-draw-results">
+          <div class="prize-draw-results-title">Gewinner</div>
+          ${results.map((p, i) => `
+            <div class="prize-draw-result-row">
+              <span class="prize-draw-medal">${medals[i]}</span>
+              <div class="prize-draw-winner-info">
+                <span class="prize-draw-name">${escHtml(abbreviateName(p.name))}</span>
+                ${p.gemId ? `<span class="prize-draw-hero">ID ${escHtml(p.gemId)}</span>` : ''}
+              </div>
+              ${prizes[i] ? `<span class="prize-draw-prize">${escHtml(prizes[i])}</span>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
+      </div>`;
+
+    wrap.querySelector('#pd-count').addEventListener('change', () => {
+      const { count, prizes } = getState();
+      render(count, prizes, null);
+    });
+
+    wrap.querySelector('#pd-draw-btn').addEventListener('click', () => {
+      const { count, prizes } = getState();
+      render(count, prizes, draw(count));
+    });
+  }
+
+  render(Math.min(2, MAX), [], null);
 }
 
 function renderStoreStats(store) {
@@ -2372,6 +2485,190 @@ function drawStandingsView(canvas, standings, tdata, title, imgCache) {
     // Separator
     ctx.strokeStyle = '#ffffff08'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(18, y + rowH); ctx.lineTo(W - 18, y + rowH); ctx.stroke();
+  });
+}
+
+// 5. ELIMINATION BRACKET
+function drawBracketCard(ctx, x, y, w, h, { name, heroName, isWinner, isLoser }, imgCache) {
+  const IMG_S = 48;
+  ctx.fillStyle = isWinner ? '#152015' : isLoser ? '#100e0c' : '#1a1510';
+  ctx.fillRect(x, y, w, h);
+
+  const imgX = x + 8, imgY = y + (h - IMG_S) / 2;
+  if (heroName && imgCache[heroName]) {
+    ctx.save();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(imgX, imgY, IMG_S, IMG_S, 3);
+    else ctx.rect(imgX, imgY, IMG_S, IMG_S);
+    ctx.clip();
+    const thumb = imgCache[heroName];
+    ctx.drawImage(thumb, 0, 0, thumb.width, thumb.height, imgX, imgY, IMG_S, IMG_S);
+    ctx.restore();
+    ctx.strokeStyle = isWinner ? '#5aad6a88' : GOLD + '55';
+    ctx.lineWidth = 1; ctx.strokeRect(imgX, imgY, IMG_S, IMG_S);
+  } else {
+    ctx.fillStyle = '#2a2018'; ctx.fillRect(imgX, imgY, IMG_S, IMG_S);
+    ctx.fillStyle = '#555'; ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('?', imgX + IMG_S / 2, imgY + IMG_S / 2);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  const textX = imgX + IMG_S + 8;
+  const textW = w - (textX - x) - 6;
+  ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+  ctx.fillStyle = isWinner ? '#5aad6a' : isLoser ? '#444' : TEXT;
+  ctx.font = `${isWinner ? 'bold ' : ''}12px sans-serif`;
+  let dispName = abbreviateName(name);
+  if (ctx.measureText(dispName).width > textW) dispName = dispName.slice(0, -1) + '…';
+  ctx.fillText(dispName, textX, y + h / 2 - 7);
+
+  ctx.fillStyle = isWinner ? '#8acd8a' : isLoser ? '#333' : GOLD + 'bb';
+  ctx.font = '10px sans-serif';
+  let dispHero = heroName || '?';
+  while (ctx.measureText(dispHero).width > textW && dispHero.length > 3) dispHero = dispHero.slice(0, -1);
+  if (dispHero !== (heroName || '?')) dispHero += '…';
+  ctx.fillText(dispHero, textX, y + h / 2 + 8);
+  ctx.textBaseline = 'alphabetic';
+}
+
+function drawBracketView(canvas, tdata, heroes, standings, title, imgCache) {
+  const elimRounds = tdata.rounds.filter(r => r.elimination).sort((a, b) => a.round - b.round);
+  if (!elimRounds.length) {
+    canvas.width = 600; canvas.height = 200;
+    const ctx = canvas.getContext('2d');
+    drawHeader(ctx, title, 'No elimination playoff rounds found', 600);
+    return;
+  }
+
+  const heroByGemId = {}, heroByNameL = {};
+  (heroes || []).forEach(h => {
+    if (h.gemId && h.hero) heroByGemId[h.gemId] = h.hero;
+    if (h.name  && h.hero) heroByNameL[h.name.toLowerCase()] = h.hero;
+  });
+  const seedMap = {};
+  (standings || []).forEach(s => { if (s.gemId) seedMap[s.gemId] = parseInt(s.rank) || null; });
+
+  elimRounds.forEach(r => r.pairings.sort((a, b) => {
+    const ta = typeof a.table === 'number' ? a.table : parseInt(String(a.table).replace(/\D/g, '')) || 999;
+    const tb = typeof b.table === 'number' ? b.table : parseInt(String(b.table).replace(/\D/g, '')) || 999;
+    return ta - tb;
+  }));
+
+  const PAD = 28, TITLE_H = 62, COL_W = 244, COL_GAP = 76;
+  const PLAYER_H = 68, CARD_GAP = 4, MATCH_H = PLAYER_H * 2 + CARD_GAP, MATCH_GAP = 36;
+  const numRounds = elimRounds.length;
+  const firstMatchCount = elimRounds[0].pairings.length;
+  const contentH = firstMatchCount * MATCH_H + Math.max(0, firstMatchCount - 1) * MATCH_GAP;
+  const W = PAD * 2 + numRounds * COL_W + (numRounds - 1) * COL_GAP;
+  const H = PAD + TITLE_H + contentH + PAD;
+  const DPR = 2;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+  ctx.fillStyle = BG; ctx.fillRect(0, 0, W, H);
+  ctx.strokeStyle = GOLD; ctx.lineWidth = 2; ctx.strokeRect(6, 6, W - 12, H - 12);
+  ctx.strokeStyle = GOLD + '44'; ctx.lineWidth = 1; ctx.strokeRect(11, 11, W - 22, H - 22);
+  ctx.fillStyle = GOLD_L; ctx.font = 'bold 18px serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(title, W / 2, 34);
+  ctx.fillStyle = TEXT_DIM; ctx.font = '12px sans-serif';
+  ctx.fillText(`Top Cut — Round${numRounds > 1 ? 's' : ''} ${elimRounds.map(r => r.round).join(', ')}`, W / 2, 54);
+  ctx.textBaseline = 'alphabetic';
+
+  const contentTop = PAD + TITLE_H;
+  const slot = MATCH_H + MATCH_GAP;
+
+  // Y positions for each match, indexed by [roundIdx][matchIdx]
+  const matchPos = [];
+  matchPos.push(elimRounds[0].pairings.map((_, mi) => {
+    const topY = contentTop + mi * slot;
+    return { topY, centerY: topY + MATCH_H / 2 };
+  }));
+
+  // Source match tracking for bracket connections
+  const srcMap = [null];
+  for (let ri = 1; ri < numRounds; ri++) {
+    const prevP = elimRounds[ri - 1].pairings;
+    const srcs = elimRounds[ri].pairings.map((p, mi) => {
+      let srcA = p.p1GemId ? prevP.findIndex(q => q.p1GemId === p.p1GemId || q.p2GemId === p.p1GemId) : -1;
+      let srcB = p.p2GemId ? prevP.findIndex(q => q.p1GemId === p.p2GemId || q.p2GemId === p.p2GemId) : -1;
+      if (srcA < 0 && srcB < 0) {
+        const g = Math.max(1, Math.floor(prevP.length / elimRounds[ri].pairings.length));
+        srcA = mi * g; srcB = Math.min(mi * g + g - 1, prevP.length - 1);
+      } else if (srcA < 0) srcA = srcB;
+      else if (srcB < 0) srcB = srcA;
+      return { srcA, srcB };
+    });
+    const prevPos = matchPos[ri - 1];
+    matchPos.push(elimRounds[ri].pairings.map((_, mi) => {
+      const { srcA, srcB } = srcs[mi];
+      const centerY = (prevPos[Math.max(0, srcA)].centerY + prevPos[Math.min(srcB, prevPos.length - 1)].centerY) / 2;
+      return { topY: centerY - MATCH_H / 2, centerY };
+    }));
+    srcMap.push(srcs);
+  }
+
+  // Connector lines (drawn first, behind cards)
+  ctx.lineWidth = 1.5; ctx.strokeStyle = GOLD + '55';
+  for (let ri = 0; ri < numRounds - 1; ri++) {
+    const colX = PAD + ri * (COL_W + COL_GAP);
+    const nextColX = PAD + (ri + 1) * (COL_W + COL_GAP);
+    const midX = colX + COL_W + COL_GAP / 2;
+    const prevPos = matchPos[ri];
+    elimRounds[ri + 1].pairings.forEach((_, nmi) => {
+      const { srcA, srcB } = srcMap[ri + 1][nmi];
+      const yA = prevPos[Math.max(0, srcA)].centerY;
+      const yB = prevPos[Math.min(srcB, prevPos.length - 1)].centerY;
+      const nCy = matchPos[ri + 1][nmi].centerY;
+      ctx.beginPath(); ctx.moveTo(colX + COL_W, yA); ctx.lineTo(midX, yA); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(colX + COL_W, yB); ctx.lineTo(midX, yB); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(midX, Math.min(yA, yB)); ctx.lineTo(midX, Math.max(yA, yB)); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(midX, nCy); ctx.lineTo(nextColX, nCy); ctx.stroke();
+    });
+  }
+
+  // Round labels and match cards
+  const allLabels = ['Round of 16', 'Quarterfinals', 'Semifinals', 'Finals'];
+  const labelStart = firstMatchCount >= 8 ? 0 : firstMatchCount >= 4 ? 1 : firstMatchCount >= 2 ? 2 : 3;
+
+  elimRounds.forEach((round, ri) => {
+    const colX = PAD + ri * (COL_W + COL_GAP);
+    ctx.fillStyle = GOLD; ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText((allLabels[Math.min(labelStart + ri, allLabels.length - 1)] || `Round ${round.round}`).toUpperCase(), colX + COL_W / 2, contentTop - 10);
+
+    round.pairings.forEach((p, mi) => {
+      const pos = matchPos[ri][mi];
+      const p1Hero = heroByGemId[p.p1GemId] || heroByNameL[(p.p1 || '').toLowerCase()] || null;
+      const p2Hero = heroByGemId[p.p2GemId] || heroByNameL[(p.p2 || '').toLowerCase()] || null;
+
+      drawBracketCard(ctx, colX, pos.topY, COL_W, PLAYER_H,
+        { name: p.p1 || '?', heroName: p1Hero, isWinner: p.winner === 'p1', isLoser: p.done && p.winner === 'p2' }, imgCache);
+      drawBracketCard(ctx, colX, pos.topY + PLAYER_H + CARD_GAP, COL_W, PLAYER_H,
+        { name: p.p2 || '?', heroName: p2Hero, isWinner: p.winner === 'p2', isLoser: p.done && p.winner === 'p1' }, imgCache);
+
+      // Divider between players
+      ctx.strokeStyle = '#2a2018'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(colX, pos.topY + PLAYER_H + CARD_GAP / 2);
+      ctx.lineTo(colX + COL_W, pos.topY + PLAYER_H + CARD_GAP / 2);
+      ctx.stroke();
+
+      // Match outline
+      ctx.strokeStyle = GOLD + '33'; ctx.lineWidth = 1;
+      ctx.strokeRect(colX, pos.topY, COL_W, MATCH_H);
+
+      // Champion label on final match winner
+      if (ri === numRounds - 1 && p.done) {
+        const winY = p.winner === 'p1' ? pos.topY : pos.topY + PLAYER_H + CARD_GAP;
+        ctx.fillStyle = GOLD_L; ctx.font = 'bold 10px sans-serif';
+        ctx.textAlign = 'right';
+        ctx.fillText('CHAMPION', colX + COL_W - 4, winY + 13);
+      }
+    });
   });
 }
 

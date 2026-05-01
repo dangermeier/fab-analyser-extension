@@ -1,5 +1,32 @@
 # Changelog
 
+## 1.7.0 — Mai 2026
+
+### Added
+
+- **Top Cut Bracket** (Judge & Store): Events with Elimination Playoff rounds now show a visual bracket tree (Quarters → Semis → Finals) with hero artwork, win/loss colouring, and "CHAMPION" label — exportable as PNG
+  - Bracket canvas renders at 2× resolution for crisp PNG export
+  - Fullscreen pairings view (`fullscreen-pairings.html`) includes a **🏆 Top Cut** toggle button to switch between pairings and bracket view; bracket fills the full screen at any resolution
+- **Prize Draw** (Store Tools tab): randomly draw X winners from an event's player pool and assign a prize label to each placement
+  - Player names shown as initials + GEM ID for GDPR compliance
+  - Re-draw as often as needed without losing the prize text inputs
+
+### Changed
+
+- Store event detail now has two classic tabs: **📊 Bildergenerierung** (all canvas views) and **🛠 Store Tools** (prize draw, fullscreen button)
+- Store tab switcher uses underline-style tab buttons instead of pill/round filter buttons
+- Store names are now resolved from the `<h2>` heading on `/store/` rather than the "Store profile" link text — fixes wrong names like "Store profile" or "Store Administrator"
+- `discoverStores` now force-updates stored names, so corrected names overwrite any previously saved wrong value
+- Content script store link detection restricted to root store URLs (`/store/{slug}/`) — prevents sub-pages from registering incorrect names
+- Store switcher scrollbar is now 2 px thin and only visible on actual overflow
+- Top Cut bracket: Swiss seeding numbers (#3, #2…) removed — they were misleading in an elimination context
+
+### Fixed
+
+- Hero names with Living Legend suffix `(LL)` are now stripped at parse time in both the heroes CSV and the player list on `/gem/{id}/run/`
+
+---
+
 ## 1.6.0 — April 2026
 
 ### Added

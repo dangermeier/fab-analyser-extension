@@ -6,16 +6,20 @@
   const iconUrl = chrome.runtime.getURL('icons/icon48.png');
 
   // ── STORE DISCOVERY ──────────────────────────────────────────────────────────
-  // 1. Scan current page DOM for store links (appears in GEM nav for store admins)
-  const storeSlugRe = /^\/store\/([a-z0-9][a-z0-9-]+-\d+)\//i;
+  // 1. Scan current page DOM — only match root store links (/store/{slug}/) not sub-pages
+  const storeRootRe = /^\/store\/([a-z0-9][a-z0-9-]+-\d+)\/?$/i;
   document.querySelectorAll('a[href*="/store/"]').forEach(a => {
-    const m = a.pathname.match(storeSlugRe);
+    const m = a.pathname.match(storeRootRe);
     if (!m) return;
     const slug = m[1].toLowerCase();
-    const name = a.textContent.trim() || slug;
+    // Strip role suffixes GEM appends to store names in the nav (e.g. "Store Administrator")
+    const name = (a.textContent.trim() || slug)
+      .replace(/\s*Store\s+Administrat(?:or|ion)\s*$/i, '')
+      .replace(/\s*Store\s+Admin\s*$/i, '')
+      .trim() || slug;
     chrome.runtime.sendMessage({ action: 'registerStore', slug, name }).catch(() => {});
   });
-  // 2. Also let background fetch /store/ in case the page itself has no nav links
+  // 2. Also let background fetch /store/ — it is the authoritative source for store names
   chrome.runtime.sendMessage({ action: 'discoverStores' }).catch(() => {});
 
   // ── FLOATING BUTTON ─────────────────────────────────────────────────────────
